@@ -1,0 +1,60 @@
+@startuml CrearReserva
+
+title CrearReserva
+
+actor Cliente
+participant Sistema
+
+loop mientras quiere seguir agregando bloques de reserva
+    note right of Sistema
+        El sistema recuerda los
+        parámetros ingresados
+    end note
+    Cliente -> Sistema: agregarBloqueReserva(checkIn, checkOut, cantMatrimonios, cantIndividuales, cantBebes, atributosHabitacion)
+end
+
+Cliente -> Sistema: obtenerDisponibilidad(): Set<DTReserva>
+
+alt hay disponibilidad
+    note right of Sistema: hay disponibilidad sii dtreserva\ncontiene al menos un\ndtreservahabitacion
+    alt confirma
+        Cliente -> Sistema: crearReserva(): void
+    else rechaza
+        Cliente -> Sistema: cancelarReserva(): void
+    end
+else no hay disponibilidad
+    alt quiere reservar en una nueva fecha
+        Cliente -> Sistema: mostrarFechasAlternativas(concidirNoches: integer): Set<DTReserva>
+        note right of Sistema
+            El Sistema retorna un conjunto
+            de reservas para las cuales hay
+            coincidencia de al menos las
+            noches indicadas para todos
+            los bloques de reserva
+        end note
+        ref over Cliente, Sistema
+            DSS: CrearReserva
+            (A priori mismos datos, solo cambiaría checkIn y checkOut de cada bloque de reserva)
+        end ref
+        note right of Sistema
+            se llama nuevamente al DSS para
+            que el Cliente elija fechas
+            dentro de las opciones propuestas
+            por el Sistema
+        end note
+    else aun quiere reservar en esa fecha
+        Cliente -> Sistema: dtress := mostrarHabitacionesAlternativas(): Set<DTReserva>
+        opt dtress no vacio
+            Cliente -> Sistema: seleccionarReserva()
+            alt confirma
+                Cliente -> Sistema: crearReserva(): void
+            else rechaza
+                Cliente -> Sistema: cancelarReserva(): void
+            end
+        end
+    else no quiere reservar
+        Cliente -> Sistema: cancelarReserva(): void
+    end
+end
+
+@enduml
