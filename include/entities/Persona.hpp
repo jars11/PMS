@@ -6,25 +6,21 @@
 
 class Persona {
     private:
+        int id;
         std::vector<std::string> nombres;
         std::vector<std::string> apellidos;
 
     public:
         // Constructor
-        Persona(const std::vector<std::string>& nombres, const std::vector<std::string>& apellidos)
-            : nombres(nombres), apellidos(apellidos) {}
+        Persona(const std::vector<std::string>& nombres, const std::vector<std::string>& apellidos);
 
         // Getters
-        std::vector<std::string> getNombres() const {
-            return nombres;
-        }
-
-        std::vector<std::string> getApellidos() const {
-            return apellidos;
-        }
+        int getId() const;
+        std::vector<std::string> getNombres() const;
+        std::vector<std::string> getApellidos() const;
 
         // Destructor
-        ~Persona() {}
+        ~Persona();
 };
 
 #endif
