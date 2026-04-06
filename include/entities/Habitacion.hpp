@@ -21,8 +21,8 @@ class Habitacion {
         std::set<Pasajero*> getOcupantes() const;
 
         // Métodos para manejar ocupantes
-        void agregarOcupante(const Pasajero& pasajero);
-        void eliminarOcupante(const Pasajero& pasajero);
+        void agregarOcupante(Pasajero* pasajero);
+        void eliminarOcupante(Pasajero* pasajero);
 
         // Destructor
         ~Habitacion();

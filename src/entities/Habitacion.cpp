@@ -16,10 +16,10 @@ std::set<Pasajero*> Habitacion::getOcupantes() const {
 }
 
 // Métodos para manejar ocupantes
-void Habitacion::agregarOcupante(const Pasajero& pasajero) {
+void Habitacion::agregarOcupante(Pasajero* pasajero) {
     ocupantes.insert(pasajero);
 }
-void Habitacion::eliminarOcupante(const Pasajero& pasajero) {
+void Habitacion::eliminarOcupante(Pasajero* pasajero) {
     ocupantes.erase(pasajero);
 }
 
