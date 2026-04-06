@@ -1,5 +1,4 @@
 #include "../../include/entities/Habitacion.hpp"
-#include <set>
 
 // Constructor
 Habitacion::Habitacion(int numero, const std::set<AtributoHabitacion>& atributos)
