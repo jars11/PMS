@@ -30,17 +30,17 @@ Este sistema fue diseñado para automatizar esa decisión.
 ## Estructura del código
 
 PMS/
-|- include/
-│   ├── controllers/
-│   ├── dtos/
-│   ├── entities/
-│   └── utils.hpp
-├── src/
-│   ├── controllers/
-│   ├── dtos/
-│   ├── entities/
-│   ├── handlers/
-│   └── main.cpp
+├── include/  
+│   ├── controllers/  
+│   ├── dtos/  
+│   ├── entities/  
+│   └── utils.hpp  
+├── src/  
+│   ├── controllers/  
+│   ├── dtos/  
+│   ├── entities/  
+│   ├── handlers/  
+│   └── main.cpp  
 └── uml/
 
 
