@@ -1,4 +1,4 @@
-<img width="3382" height="1935" alt="Diargama de Comunicación" src="https://github.com/user-attachments/assets/f1482be2-e8fe-4b41-9873-a1827cbab166" /><img width="3382" height="1935" alt="Diargama de Comunicación" src="https://github.com/user-attachments/assets/b8dff4d7-27fb-4e51-a022-21776fddbc31" /># PMS – Diseño de Sistema de Asignación Inteligente de Habitaciones
+# PMS – Diseño de Sistema de Asignación Inteligente de Habitaciones
 
 Proyecto de análisis y diseño orientado a objetos de un **Property Management System (PMS)** enfocado en la asignación automática e inteligente de habitaciones.
 
