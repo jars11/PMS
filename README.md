@@ -29,7 +29,7 @@ Este sistema fue diseñado para automatizar esa decisión.
 
 ## Estructura del código
 
-PMS/
+PMS/  
 ├── include/  
 │   ├── controllers/  
 │   ├── dtos/  
