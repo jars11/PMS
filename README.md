@@ -30,7 +30,7 @@ Este sistema fue diseñado para automatizar esa decisión.
 ## Estructura del código
 
 PMS/
-├── include/
+|- include/
 │   ├── controllers/
 │   ├── dtos/
 │   ├── entities/
