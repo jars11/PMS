@@ -1,0 +1,6 @@
+target/
+data/
+*.class
+
+# Local SDD tooling state (auto-generated, contains machine-specific paths)
+.atl/
