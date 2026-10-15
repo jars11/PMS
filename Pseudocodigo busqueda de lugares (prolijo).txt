@@ -1,0 +1,261 @@
+Algoritmo: buscarHuecos(
+        Set<RHSolicitada> solicitudes,
+        bool permitirColchonesExtra   = false,
+        int  relajacionDistribucion   = 0,
+        bool atributosRelajados       = false,
+        bool fechasRelajadas          = false,
+        int  diasVentana              = 15
+    ) : Set<Set<RHPropuesta>>
+
+# ---------------------------------------------------------------------------
+# Parámetros
+# ---------------------------------------------------------------------------
+# permitirColchonesExtra : cada colchón extra (Habitacion.colchones) cuenta como
+#                          una cama individual más.
+# relajacionDistribucion :
+#     0. Cumple la cantidad de camas (mat, ind, cunas) por habitación pedida.
+#     1. Cumple la cantidad de personas por habitación pedida, pero no las camas.
+#     2. Cumple solo la cantidad total de personas (no la cantidad por habitación):
+#        se usan tantas habitaciones por noche como hagan falta.
+# atributosRelajados     : se aceptan habitaciones que cumplan un subconjunto
+#                          MAXIMAL de los atributos pedidos.
+# fechasRelajadas        : se muestra TODA la disponibilidad dentro de la ventana
+#                          [min checkIn - diasVentana, max checkOut + diasVentana],
+#                          sin forzar la duración pedida. El usuario elige.
+# diasVentana            : si no se explicita, vale 15.
+#
+# Regla general: NINGUNA bandera cambia sin preguntar al usuario. Si el usuario
+# acepta, buscarHuecos se llama a sí misma con la bandera nueva y el resto igual.
+# Si NO acepta, se le ofrece buscar en otras fechas con las MISMAS restricciones.
+# Si tampoco acepta eso, no quiere nada: se corta la ejecución y se devuelve ∅.
+#
+# Prioridad (de lo más importante a lo menos importante):
+#     1. Capacidad total por noche
+#     2. Capacidad por habitación
+#     3. Distribución de camas por habitación
+#     4. Atributos de las habitaciones        # la cereza del pastel
+# Se verifica y se pregunta en ese orden. Lo menos importante es lo primero que
+# se pierde: entre dos alternativas degradadas se prefiere la que pierde
+# atributos antes que la que cambia camas, y esta antes que la que reparte
+# personas en otras habitaciones.
+# En los pasos 1 y 2, antes de relajar la distribución se ofrecen colchones extra.
+
+# ---------------------------------------------------------------------------
+# Conceptos
+# ---------------------------------------------------------------------------
+# Configuración de habitación: (cantMatrimoniales, cantIndividuales, cantCunas,
+#     colchones, atributos). Dos habitaciones con la misma configuración son
+#     intercambiables; por eso una RHPropuesta no nombra la habitación.
+#     disponibles(c, n) = cantidad de habitaciones de configuración c libres la noche n.
+#
+# Tipo pedido de una solicitud s: (personas, mat, ind, cunas, atributos) de s.
+#     Solicitudes con el mismo tipo pedido son "del mismo tipo".
+#
+# Tipo aceptable de s: configuraciones que se aceptan para s según las banderas
+# vigentes. Tiene DOS dimensiones independientes:
+#
+#   Distribución (relajacionDistribucion):
+#     0. Mismas camas que s.
+#     1. Capacidad ≥ personas(s), cualquier distribución de camas.
+#     2. Sin correspondencia habitación a habitación: cada noche se usan tantas
+#        habitaciones como hagan falta para cubrir el total de personas, con la
+#        menor cantidad de habitaciones posible.
+#     Los colchones cuentan como camas individuales si permitirColchonesExtra.
+#
+#   Atributos (atributosRelajados):
+#     Niveles 0 y 1 (una habitación por solicitud):
+#       - NO relajados : la habitación tiene TODOS los atributos de s.
+#       - Relajados    : la habitación tiene un subconjunto maximal de ellos.
+#     Nivel 2 (personas repartidas): para cada noche n,
+#       pedidos(n)   = unión de atributos de las solicitudes que ocupan n
+#       propuestos(n)= unión de atributos de las habitaciones propuestas en n
+#       - NO relajados : propuestos(n) ⊇ pedidos(n)
+#       - Relajados    : propuestos(n) ∩ pedidos(n) es un subconjunto maximal
+#                        de pedidos(n).
+#
+# Relajar la distribución NUNCA relaja los atributos: los atributos solo se
+# relajan si el usuario acepta atributosRelajados. Se verifican al final, pero
+# no dependen de que se cumpla la capacidad o la distribución.
+# Este tipo aceptable se usa en TODAS las secciones, incluida fechas relajadas:
+# lo que el usuario ya aceptó relajar sigue relajado.
+#
+# penalidad(propuesta) = (relajacionDistribucion, cantidad de atributos
+#     faltantes, colchones usados, capacidad sobrante, cantidad de habitaciones).
+#     Se compara en ese orden; menor es mejor.
+#
+# Cantidad necesaria: necesarias(T, n) = cantidad de solicitudes de tipo T que
+#     ocupan la noche n. Hay que encontrar esa cantidad de habitaciones DISTINTAS.
+#
+# alcanza(criterio): existe una asignación de habitaciones distintas por noche
+#     para TODAS las solicitudes A LA VEZ usando ese criterio (es el mismo
+#     backtracking de la sección 5, cortando en la primera solución).
+#     Se verifica en conjunto y no tipo por tipo, porque una misma habitación
+#     puede servir a dos tipos distintos y no puede usarse dos veces.
+
+# ---------------------------------------------------------------------------
+# Auxiliar: ofrecerRelajacion(pregunta, llamada) : Set<Set<RHPropuesta>>
+# ---------------------------------------------------------------------------
+• Preguntar pregunta
+• Si acepta → Devolver llamada        # buscarHuecos con la bandera nueva
+• Preguntar: "¿Buscar en otras fechas (±diasVentana días) con las
+              restricciones actuales?"
+• Si acepta → Devolver buscarHuecos(..., fechasRelajadas = true, ...)
+• Devolver ∅                          # el usuario no quiere nada: fin
+
+# ---------------------------------------------------------------------------
+# 0. Fechas relajadas: mapa de disponibilidad, el usuario decide qué reservar
+# ---------------------------------------------------------------------------
+• Si fechasRelajadas
+     • inicioVentana ← min(checkIn de solicitudes)  - diasVentana
+     • finVentana    ← max(checkOut de solicitudes) + diasVentana
+     • resultado ← ∅
+     • Agrupar solicitudes por tipo pedido
+     • Para cada tipo pedido T
+          • habsT ← habitaciones cuya configuración está en el tipo aceptable de T
+                    (sin filtrar por fecha)
+            # En nivel 2 no hay correspondencia por habitación: habsT son todas
+            # las habitaciones, indicando qué atributos pedidos cubre cada una.
+          • Para cada habitación h en habsT
+               • Para cada rango continuo libre [desde, hasta] de h que se
+                 intersecta con [inicioVentana, finVentana]
+                    # Cualquier duración: puede ser más corto o más largo que lo pedido
+                    • Si desde = inicioVentana
+                         • Extender hacia atrás hasta la primera noche ocupada
+                    • Si hasta = finVentana
+                         • Extender hacia adelante hasta la primera noche ocupada
+                           (si no hay reservas futuras: "libre sin límite")
+                    • Agregar RHPropuesta(T, configuración de h, desde, hasta,
+                                          penalidad) a resultado
+     • Devolver resultado agrupado por tipo pedido, ordenado por fecha y penalidad
+       # Para cada fecha se ve cuántas habitaciones de cada tipo hay libres,
+       # así el usuario puede comparar con necesarias(T, n).
+
+# ---------------------------------------------------------------------------
+# 1. Capacidad total por noche  (ManejadorCapacidad.hayCapacidad)
+# ---------------------------------------------------------------------------
+• Para cada noche n del rango pedido
+     • personas(n)  ← suma de personas de las solicitudes que ocupan n
+     • capacidad(n) ← suma de camas de las habitaciones libres en n
+                      (+ colchones si permitirColchonesExtra)
+• Si existe n con personas(n) > capacidad(n)
+     • Si NO permitirColchonesExtra Y con colchones alcanzaría
+          • Devolver ofrecerRelajacion("¿Buscar con colchones extra?",
+                     buscarHuecos(..., permitirColchonesExtra = true, ...))
+     • Sino
+          • Preguntar: "¿Buscar en otras fechas (±diasVentana días)?"
+          • Si acepta → Devolver buscarHuecos(..., fechasRelajadas = true, ...)
+          • Devolver ∅
+
+# ---------------------------------------------------------------------------
+# 2. Capacidad por habitación  (ManejadorDistribucionHabs)
+# ---------------------------------------------------------------------------
+• Si relajacionDistribucion < 2
+     • Si NO alcanza(habitaciones con capacidad ≥ personas(s) para cada s)
+          • Si NO permitirColchonesExtra Y con colchones alcanzaría
+               • Devolver ofrecerRelajacion("¿Agregar colchones extra en las
+                                             habitaciones que los admiten?",
+                          buscarHuecos(..., permitirColchonesExtra = true, ...))
+          • Sino
+               • Devolver ofrecerRelajacion("¿Alojar al total de personas con
+                                             otra cantidad por habitación?",
+                          buscarHuecos(..., relajacionDistribucion = 2, ...))
+     • Si alguna habitación usada tiene capacidad sobrante
+          • Notificar: habitación más grande que lo pedido (más cara)
+• Sino   # relajacionDistribucion = 2
+     • Notificar: la distribución de personas no es la deseada
+     • Saltear la sección 3 (no se exigen camas por habitación)
+
+# Nota: si con colchones extra ya aceptados sigue sin alcanzar, en la llamada
+# recursiva se entra por el "Sino" y se ofrece repartir personas.
+
+# ---------------------------------------------------------------------------
+# 3. Distribución de camas por habitación  (ManejadorDistribucionCamas)
+# ---------------------------------------------------------------------------
+• Si relajacionDistribucion = 0
+     • Si NO alcanza(habitaciones con las camas pedidas por cada s)
+       (los colchones cuentan como individuales si permitirColchonesExtra)
+          • Devolver ofrecerRelajacion("¿Buscar habitaciones con la capacidad
+                                        pedida pero otra distribución de camas?",
+                     buscarHuecos(..., relajacionDistribucion = 1, ...))
+• Si relajacionDistribucion = 1
+     • Notificar: distribución de camas no deseada
+
+# ---------------------------------------------------------------------------
+# 4. Atributos de las habitaciones  (ManejadorAtributosHabs)
+# ---------------------------------------------------------------------------
+# Se llega acá con capacidad y distribución ya resueltas (exactas o relajadas
+# según lo que aceptó el usuario). Los atributos se exigen igual en cualquier
+# nivel de distribución; nunca hacen que se relaje capacidad ni camas.
+• Si NO atributosRelajados
+     • Si relajacionDistribucion < 2
+          • criterio ← tipo aceptable de cada s con TODOS sus atributos
+     • Sino
+          • criterio ← para cada noche n: propuestos(n) ⊇ pedidos(n)
+     • Si NO alcanza(criterio)
+          • Devolver ofrecerRelajacion("¿Buscar habitaciones que cumplan la mayor
+                                        cantidad posible de los atributos pedidos?",
+                     buscarHuecos(..., atributosRelajados = true, ...))
+• Sino
+     • Si relajacionDistribucion < 2
+          • Para cada s: se aceptan habitaciones con algún subconjunto de
+            subconjuntosMaximales(atributos de s)                    # sección 6
+     • Sino
+          • Para cada noche n: se aceptan repartos cuyos atributos cubiertos
+            están en subconjuntosMaximales(pedidos(n))
+     • Notificar qué atributos faltan en cada propuesta
+
+# ---------------------------------------------------------------------------
+# 5. Armado del Set<Set<RHPropuesta>>  (ManejadorDisponibilidad)
+# ---------------------------------------------------------------------------
+# Cada Set<RHPropuesta> interno es UNA alternativa completa: cubre todas las
+# solicitudes en sus fechas. El Set externo agrupa las alternativas distintas
+# (por ejemplo, una que pierde un atributo y otra que cambia las camas).
+#
+# Ejemplo: se piden 2 dobles matrimoniales con vista al mar del 1 al 5.
+#   Alternativa 1: {RHP(matrimonial, sin vista, 1-5), RHP(matrimonial, vista, 1-5)}
+#   Alternativa 2: {RHP(matrimonial, vista, 1-5), RHP(2 individuales, vista, 1-5)}
+#
+• alternativas ← ∅
+• Si relajacionDistribucion < 2           # una habitación por solicitud
+     • Ordenar solicitudes por checkIn
+     • uso(c, n) ← 0 para toda configuración c y noche n
+     • asignar(i, actual):                  # backtracking
+          • Si i > |solicitudes|
+               • Agregar actual a alternativas
+               • Volver
+          • s ← solicitudes[i]
+          • Para cada configuración c en el tipo aceptable de s, de menor a
+            mayor penalidad
+               • Si para toda noche n de s: uso(c, n) < disponibles(c, n)
+                    • uso(c, n) += 1 para toda noche n de s
+                    • asignar(i + 1, actual ∪ {RHPropuesta(s, c)})
+                    • uso(c, n) -= 1 para toda noche n de s
+     • asignar(1, ∅)
+• Sino                                    # nivel 2: reparto por noche
+     • Para cada multiconjunto R de RHPropuesta(configuración, desde, hasta)
+       con la menor cantidad de habitaciones posible tal que, para toda noche n:
+          - capacidad de las propuestas de R que cubren n ≥ personas(n)
+          - cantidad de propuestas de R con configuración c en n ≤ disponibles(c, n)
+          - los atributos de las propuestas de R que cubren n cumplen el criterio
+            de atributos de nivel 2 (unión)
+          • Agregar R a alternativas
+       # Una habitación puede cubrir solo parte del rango (desde-hasta) si en
+       # otras noches no hace falta.
+• Quitar alternativas repetidas (mismo multiconjunto de (configuración, fechas))
+• Quitar alternativas dominadas: A domina a B si cada propuesta de A tiene
+  penalidad ≤ que su par en B y al menos una es menor
+• Devolver alternativas ordenadas por penalidad total
+
+# ---------------------------------------------------------------------------
+# 6. Auxiliar: subconjuntosMaximales(A)
+# ---------------------------------------------------------------------------
+# Orden por inclusión sobre un conjunto de atributos pedidos A
+# (los de una solicitud en niveles 0-1, o pedidos(n) en nivel 2).
+• maximales ← ∅
+• Para k desde |A| hasta 1
+     • Para cada subconjunto B ⊆ A con |B| = k
+          • Si B ⊆ algún elemento de maximales → saltear
+          • Si alcanza(distribución vigente, exigiendo B en lugar de A)
+               • Agregar B a maximales
+• Devolver maximales
+  # Ej.: se pide ABC, hay AB y BC → se muestran AB y BC; A, B, C no.

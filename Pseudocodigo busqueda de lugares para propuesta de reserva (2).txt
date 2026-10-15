@@ -1,0 +1,43 @@
+Algoritmo: buscarHuecos(Set RHSolicitada, bool permitirColchonesExtra, int relajacionDistribucion = 0, bool atributosRelajados, bool fechasRelajadas) : Set (Set RHPropuesta)
+#relajacionDistribucion:
+#0. Cumple cantidad de camas por habitación pedida (si se habilitan colchones extra, los colchones suman como una cama individual)
+#1. Cumple cantidad de personas por habitacion pedida (pero no cantidad de camas por habitacion)
+#2. Cumple cantidad total de personas pedida (pero no cantidad por habitación)
+• Dado un set RHSolicitada
+• Si fechas exactas
+     • Sumar la cantidad de personas por día
+     • Si para cada día la capacidad total cumple
+          • Dado ese día:
+          • Si la capacidad de cada habitación por separado cumple (si hay capacidad sobrante notificar, porque es una habitación más grande y por ende más cara)
+               • Si la cantidad de camas (mat, ind, cunas) para cada habitación cumple
+                    • Si para cada RHSolicitada existe habitacion con esos atributos para la fecha solicitada
+                         • Dar un conjunto de un conjunto de RHPropuesta con esas habitaciones para esas fechas (sin dar la habitación explícita)
+                    • Sino preguntar al usuario si quiere buscar para esa misma fecha habitaciones con la misma distribución de camas aunque no cumplan con todos los atributos pedidos por cada habitación
+                         • Si quiere
+                              • Dar un conjunto de 
+               • Sino buscar habitación que cumpla la capacidad por separado (sin colchón extra) con una distribución de camas no deseada #indicar que es una distribución de camas no deseada
+                    • Buscar conjunto de habitaciones (para cada habitación pedida) con la mayoría de los atributos pedidos que no cumplan con la distribución exacta de camas por habitación pero que cumpla la capacidad por habitación
+          • Sino si la capacidad de cada habitación por separado, agregando colchón en las habitaciones que se pueda (y que no cumplan con la capacidad), es decir que tengan el atributo, cumple #indicar que se agrega colchón
+               • Si la cantidad de camas (mat, ind, cunas) para cada habitación cumple (esta vez contando los colchones extra como camas individuales)
+                    • Dar conjunto de habitaciones...
+               • Sino (si la distribución de camas no es la deseada)
+                    • Igual buscar conjunto de habitaciones con mayor cantidad de atributos (que cumpla en cantidad por habitación)
+          • Sino buscar alojar a la gente en distribución de distinta cantidad por habitación pero que se pueda alojar al total de personas #indicar que la distribución de personas no es la deseada
+               • Dar conjunto de habitaciones... (lo mejor que se pueda)
+
+     • Sino preguntar al usuario si quiere buscar si para cada día la capacidad cumple con colchones extra o buscar en otras fechas
+          • Si quiere buscar si cumple capacidad con colchones extra
+               • Buscar
+               • Si existe
+                    • Si la capacidad de cada habitacion por separado cumple (con colchones extra)
+                         • Si la distribucion de camas por cada habitacion (tomando colchones extra como camas individuales) cumple
+                              • Dar conjunto...
+                         • Sino
+                              • Dar conjunto aunque la distribución de camas sea no deseada (y notificar)
+                    • Sino
+                         • Dar conjunto (lo mejor que se pueda)
+
+               • Sino
+                    • Dar rangos de fechas en donde haya lugar y también rangos donde haya lugar con colchón extra
+          • Sino
+               • Dar rangos de fechas en donde haya lugar (sin colchon extra)

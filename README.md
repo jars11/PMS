@@ -23,25 +23,50 @@ Este sistema fue diseñado para automatizar esa decisión.
 | Diagrama de clases      | Completo        |
 | Diagrama de secuencia   | Completo (crear reserva) |
 | Diagrama de comunicación| Completo (funciones clave) |
-| Código base (C++)       | Solo estructura (headers, getters y setters) |
-| Lógica de asignación    | No implementada |
-| Persistencia / Base de datos | No implementada |
+| Código (Java 21 + Maven)| Completo (compila, testea y corre un demo) |
+| Lógica de asignación    | Implementada (cadena ManejadorCapacidad → ManejadorDistribucionHabs → ManejadorDistribucionCamas → ManejadorDisponibilidad) |
+| Persistencia / Base de datos | Implementada (JPA/Hibernate + H2) |
+
+## Requisitos
+
+- JDK 21+ (probado con Temurin 21 LTS)
+- Maven 3.9+
 
 ## Estructura del código
 
 PMS/  
-├── include/  
-│   ├── controllers/  
+├── pom.xml  (build Maven, Java 21)  
+├── src/main/java/com/pms/  
+│   ├── controllers/  (ControladorReservas, ControladorHabitaciones, ControladorPersonas)  
 │   ├── dtos/  
-│   ├── entities/  
-│   └── utils.hpp  
-├── src/  
-│   ├── controllers/  
-│   ├── dtos/  
-│   ├── entities/  
-│   ├── handlers/  
-│   └── main.cpp  
+│   ├── entities/  (entidades JPA: Reserva, RHPropuesta, Pago, Persona, Habitacion...)  
+│   ├── handlers/  (ManejadorCapacidad, ManejadorDistribucionHabs, ManejadorDistribucionCamas, ManejadorDisponibilidad, ManejadorAtributosHabs)  
+│   ├── persistence/  (JpaUtil + repositorios)  
+│   └── Main.java  (demo)  
+├── src/test/java/com/pms/  (tests JUnit 5)  
+├── src/main/resources/META-INF/persistence.xml  (persistence units `pms` y `pms-test`)  
 └── uml/
+
+## Comandos
+
+    mvn test            # corre los tests (JUnit 5, 20 casos)
+    mvn exec:java       # corre el demo (usa la BD de archivo data/pms.mv.db)
+
+La persistencia usa H2 embebida: la aplicación opera contra `data/pms.mv.db` (ignorada por git); los tests usan una BD en memoria que se crea y destruye en cada corrida.
+
+## Interfaz de usuario (Swing - demo)
+
+Aplicación de escritorio Swing (`com.pms.ui.MainUI`) para que el recepcionista
+ingrese la solicitud: cantidad de matrimonios, cantidad de adultos separados,
+cantidad de niños, fechas de check-in y check-out, y atributos deseados
+(balcón, jacuzzi, camas separadas, etc.). Al generar la propuesta devuelve un
+conjunto de habitaciones propuestas (`DTRHPropuesta`, el DTO RHPropuesta) con
+las camas aportadas por cada una y el subtotal de la estadía.
+
+    mvn exec:java -Dexec.mainClass=com.pms.ui.MainUI
+
+La lógica de asignación es una heurística DEMO (`ServicioPropuestasDemo`); la
+asignación real (cadena de manejadores) se integrará en una etapa posterior.
 
 
 ## Diagramas
@@ -64,4 +89,4 @@ PMS/
 
 ## Notas
 
-Este proyecto quedó en etapa de diseño + esqueleto de código. La motivación original era usarlo en un hotel real, pero esa oportunidad no se concretó. Se mantiene como muestra de análisis y modelado orientado a objetos de un problema de negocio real.
+Proyecto originalmente modelado y prototipado en C++ (diseño orientado a objetos a partir de los diagramas UML de `uml/`). Se convirtió a **Java 21 + Maven + JPA/Hibernate + H2** con persistencia real, tests de unidad (JUnit 5) y demo ejecutable. La motivación original era usarlo en un hotel real; se mantiene como muestra completa de análisis, modelado e implementación de un problema de negocio real.

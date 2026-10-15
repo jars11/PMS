@@ -1,0 +1,99 @@
+ALGORITMO: AsignaciónGreedyConAtributosYContigüidad
+
+ENTRADA:
+  - Lista de habitaciones H = {h1, h2, ..., hn}
+    Cada habitación hi tiene:
+      - id
+      - atributos: conjunto de strings (ej: {"balcón", "jacuzzi", "vista"})
+  - Lista de reservas R = {r1, r2, ..., rm}
+    Cada reserva rj tiene:
+      - id
+      - inicio (s)
+      - fin (e)          // tiempo discreto, s < e
+      - requisitos: conjunto de strings (ej: {"balcón", "jacuzzi"})
+
+SALIDA:
+  - Asignación: mapa reserva → habitación (o null si no se pudo asignar)
+  - (Opcional) número de uniones contiguas logradas
+
+--------------------------------------------------
+1. Inicialización
+--------------------------------------------------
+Para cada habitación h en H:
+    h.ultimo_fin ← -∞          // o el tiempo mínimo posible
+    h.reservas_asignadas ← lista vacía
+
+asignacion ← mapa vacío
+
+--------------------------------------------------
+2. Ordenar las reservas
+--------------------------------------------------
+// Opción A (simple y efectiva):
+Ordenar R por inicio ascendente
+// (en caso de empate, por duración descendente o por número de requisitos descendente)
+
+// Opción B (mejor en la práctica – prioriza las más restrictivas):
+Ordenar R por:
+  1. número de requisitos descendente
+  2. inicio ascendente
+
+--------------------------------------------------
+3. Asignar una por una
+--------------------------------------------------
+Para cada reserva r en R (ya ordenada):
+
+    mejores_candidatas ← lista vacía
+    mejor_puntuacion ← -∞
+
+    Para cada habitación h en H:
+
+        // 1. ¿Es compatible por atributos?
+        Si r.requisitos no está contenido en h.atributos:
+            continuar con la siguiente habitación
+
+        // 2. ¿Está libre en el intervalo [r.inicio, r.fin)?
+        Si h.ultimo_fin > r.inicio:          // hay solapamiento
+            continuar
+
+        // 3. Calcular puntuación de contigüidad
+        gap ← r.inicio - h.ultimo_fin
+
+        Si gap == 0:
+            puntuacion ← 1000               // abute perfecto (máxima prioridad)
+        Sino Si gap > 0:
+            puntuacion ← 500 - gap          // cuanto más pequeño el hueco, mejor
+        Sino:
+            puntuacion ← -∞                 // no debería llegar aquí
+
+        // Opcional: penalizar o bonificar según otros criterios
+        // puntuacion ← puntuacion - tamaño_de_h.atributos  // preferir habitaciones más “ajustadas”
+
+        Si puntuacion > mejor_puntuacion:
+            mejor_puntuacion ← puntuacion
+            mejores_candidatas ← [h]
+        Sino Si puntuacion == mejor_puntuacion:
+            agregar h a mejores_candidatas
+
+    // Elegir la mejor habitación
+    Si mejores_candidatas no está vacía:
+        // Criterio de desempate (elige el que quieras):
+        h_elegida ← la de menor id entre mejores_candidatas
+        // o la que tenga menos atributos sobrantes, etc.
+
+        asignacion[r] ← h_elegida
+        h_elegida.ultimo_fin ← r.fin
+        agregar r a h_elegida.reservas_asignadas
+    Sino:
+        asignacion[r] ← null          // no se pudo asignar
+
+--------------------------------------------------
+4. (Opcional) Calcular cuántas uniones contiguas se lograron
+--------------------------------------------------
+contiguas ← 0
+Para cada habitación h:
+    Ordenar h.reservas_asignadas por inicio
+    Para i = 1 hasta longitud-1:
+        Si h.reservas_asignadas[i].inicio == h.reservas_asignadas[i-1].fin:
+            contiguas ← contiguas + 1
+
+RETORNAR asignacion, contiguas
