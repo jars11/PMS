@@ -13,6 +13,7 @@ import com.pms.persistence.JpaUtil;
 import com.pms.persistence.RepositorioHabitaciones;
 import com.pms.persistence.RepositorioPersonas;
 import com.pms.persistence.RepositorioReservas;
+import com.pms.persistence.RepositorioSolicitudes;
 import com.pms.utils.AtributoHabitacion;
 import com.pms.utils.Fechas;
 import com.pms.utils.TipoDocumento;
@@ -78,6 +79,9 @@ public final class Main {
     }
 
     private static void limpiarDatos() {
+        // Orden por FKs: contratos -> solicitudes -> reservas -> personas -> habitaciones.
+        new RepositorioSolicitudes().eliminarContratos();
+        new RepositorioSolicitudes().eliminarTodas();
         new RepositorioReservas().eliminarTodas();
         new RepositorioPersonas().eliminarTodas();
         new RepositorioHabitaciones().eliminarTodas();

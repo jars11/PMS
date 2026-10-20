@@ -45,11 +45,6 @@ public class Reserva {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean lateCheckout = LATE_CHECKOUT_POR_DEFECTO;
 
-    // default false para que hbm2ddl update pueda agregar la columna a la tabla existente;
-    // a lo sumo una reserva efectiva por solicitud (regla de dominio en Solicitud)
-    @Column(nullable = false, columnDefinition = "boolean default false")
-    private boolean efectiva;
-
     @Enumerated(EnumType.STRING)
     private TipoMoneda moneda = TipoMoneda.USD;
 
@@ -62,8 +57,8 @@ public class Reserva {
     @Enumerated(EnumType.STRING)
     private EstadoReserva estado = EstadoReserva.PendienteDePago;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "titular_id")
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @JoinColumn(name = "titular_id", nullable = false)
     private TitularReserva titular;
 
     @OneToMany(mappedBy = "reserva", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -99,14 +94,6 @@ public class Reserva {
 
     public void setLateCheckout(boolean lateCheckout) {
         this.lateCheckout = lateCheckout;
-    }
-
-    public boolean isEfectiva() {
-        return efectiva;
-    }
-
-    public void setEfectiva(boolean efectiva) {
-        this.efectiva = efectiva;
     }
 
     public TipoMoneda getMoneda() {

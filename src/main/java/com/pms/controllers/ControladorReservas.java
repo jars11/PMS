@@ -256,6 +256,7 @@ public class ControladorReservas {
             Reserva r = new Reserva(titularGestionado);
             Solicitud solicitud = new Solicitud(titularGestionado);
             float total = 0.0f;
+            int consumidos = 0;
 
             for (DTRHSolicitada s : rhsolicitadas) {
                 if (!manejadorCapacidad.hayCapacidad(s).isEmpty()) {
@@ -289,6 +290,14 @@ public class ControladorReservas {
                 // Espeja SOLO los bloques consumidos: los saltados por los filtros no se espejan.
                 solicitud.addRHSolicitada(RHSolicitada.de(s));
                 total += rp.getSubtotal();
+                consumidos++;
+            }
+
+            // Invariante 1..* RHSolicitada: sin bloques consumidos no se persiste
+            // una solicitud vacia (ni su reserva/contrato). Lanzar dentro de la
+            // transaccion garantiza el rollback.
+            if (consumidos == 0) {
+                throw new IllegalStateException("sin bloques consumidos para crear la reserva");
             }
 
             r.setActiva(true);
@@ -296,7 +305,6 @@ public class ControladorReservas {
             r.setMontoSenia(0.0f);
             r.setMoneda(TipoMoneda.USD);
             r.setEstado(EstadoReserva.PendienteDePago);
-            r.setEfectiva(true);
 
             persistirReservaYSolicitud(em, r, solicitud, PerfilRelajacion.POR_DEFECTO);
 
@@ -400,7 +408,6 @@ public class ControladorReservas {
             r.setMontoSenia(0.0f);
             r.setMoneda(TipoMoneda.USD);
             r.setEstado(EstadoReserva.PendienteDePago);
-            r.setEfectiva(true);
 
             // La solicitud espeja la peticion explicita como un unico bloque (sin bebes).
             Solicitud solicitud = new Solicitud(titularGestionado);
@@ -485,7 +492,6 @@ public class ControladorReservas {
             r.setMontoSenia(0.0f);
             r.setMoneda(TipoMoneda.USD);
             r.setEstado(EstadoReserva.PendienteDePago);
-            r.setEfectiva(true);
 
             // La solicitud espeja la peticion (incluye cantBebes), un unico bloque.
             Solicitud solicitudPersistida = new Solicitud(titularGestionado);
@@ -692,10 +698,72 @@ public class ControladorReservas {
             r.setMontoSenia(0.0f);
             r.setMoneda(TipoMoneda.USD);
             r.setEstado(EstadoReserva.PendienteDePago);
-            r.setEfectiva(true);
 
             persistirReservaYSolicitud(em, r, solicitud, perfil);
             return r;
+        });
+    }
+
+    /**
+     * Replaces the reserva linked to a solicitud without losing its payments:
+     * persists {@code nueva}, re-points the existing contract (same perfil and
+     * solicitud), migrates every {@link com.pms.entities.Pago}, and finally
+     * removes the old reserva. One transaction. {@code nueva} must be transient
+     * with proposals and a titular, and must not bring payments.
+     */
+    public Reserva reemplazarReserva(long reservaViejaId, Reserva nueva) {
+        if (nueva == null || nueva.getTitular() == null) {
+            throw new IllegalArgumentException("reserva nueva sin titular");
+        }
+        if (!nueva.getPagos().isEmpty()) {
+            throw new IllegalArgumentException("la reserva nueva no debe traer pagos");
+        }
+
+        return JpaUtil.enTransaccion(em -> {
+            Reserva vieja = em.find(Reserva.class, reservaViejaId);
+            if (vieja == null) {
+                throw new IllegalArgumentException("reserva no existe: " + reservaViejaId);
+            }
+
+            ContratoReserva contrato = em.createQuery(
+                            "select c from ContratoReserva c join fetch c.solicitud " +
+                                    "where c.reserva.id = :rid", ContratoReserva.class)
+                    .setParameter("rid", reservaViejaId)
+                    .getResultList().stream().findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "reserva sin contrato: " + reservaViejaId));
+
+            // 1) Persistir la reserva nueva: el FK del contrato debe poder apuntarle.
+            nueva.setTitular(em.merge(nueva.getTitular()));
+            for (RHPropuesta p : nueva.getRHPropuestas()) {
+                if (p.getHabitacion() != null && p.getHabitacion().getId() != null) {
+                    p.setHabitacion(em.getReference(Habitacion.class, p.getHabitacion().getId()));
+                }
+            }
+            em.persist(nueva);
+            em.flush();
+
+            // 2) Re-apuntar el contrato existente: conserva solicitud y perfil.
+            contrato.setReserva(nueva);
+            em.flush();
+
+            // 3) Migrar los pagos ANTES de borrar la reserva vieja.
+            em.createQuery("update Pago p set p.reserva = :nueva where p.reserva.id = :vieja")
+                    .setParameter("nueva", nueva)
+                    .setParameter("vieja", reservaViejaId)
+                    .executeUpdate();
+
+            // 4) Vaciar el contexto (la coleccion de pagos vieja quedo obsoleta) y
+            // borrar la reserva vieja; sus pagos ya apuntan a la nueva.
+            em.flush();
+            em.clear();
+
+            Reserva viejaGestionada = em.find(Reserva.class, reservaViejaId);
+            if (viejaGestionada != null) {
+                em.remove(viejaGestionada);
+            }
+            em.flush();
+            return nueva;
         });
     }
 
@@ -718,7 +786,7 @@ public class ControladorReservas {
             }
             // Los contratos espejo referencian la reserva (FK reserva_id): se borran
             // antes que la reserva para no violar la integridad referencial. La
-            // solicitud sobrevive (su pedido sigue siendo valido, sin reserva efectiva).
+            // solicitud sobrevive (su pedido sigue siendo valido, sin reserva vinculada).
             em.createQuery("delete from ContratoReserva c where c.reserva.id = :rid")
                     .setParameter("rid", reservaId)
                     .executeUpdate();

@@ -46,29 +46,39 @@ public class RepositorioSolicitudes {
     }
 
     /**
-     * Contract of the effective reserva of one solicitud, or null. Join fetch
-     * so the detached result carries its reserva. At most one row by the
-     * domain invariant.
+     * Contract linking one solicitud to its reserva, or null when the
+     * solicitud has no contract. Single join fetch so the detached result
+     * carries its reserva; at most one row by the per-side UNIQUE.
      */
-    public ContratoReserva findContratoEfectivo(long solicitudId) {
+    public ContratoReserva findContratoDeSolicitud(long solicitudId) {
         return JpaUtil.enTransaccion(em ->
                 em.createQuery(
-                                "select c from ContratoReserva c join fetch c.reserva r " +
-                                        "where c.solicitud.id = :sid and r.efectiva = true", ContratoReserva.class)
+                                "select c from ContratoReserva c join fetch c.reserva " +
+                                        "where c.solicitud.id = :sid", ContratoReserva.class)
                         .setParameter("sid", solicitudId)
                         .getResultList().stream().findFirst().orElse(null));
     }
 
-    /** Effective reserva of one solicitud, or null. */
-    public Reserva findReservaEfectiva(long solicitudId) {
+    /**
+     * Reserva linked by contract to one solicitud, or null when the solicitud
+     * has no contract. This is the ONLY solicitud -> reserva resolution; there
+     * is no effectiveness flag anywhere.
+     */
+    public Reserva findReservaDeSolicitud(long solicitudId) {
         return JpaUtil.enTransaccion(em ->
                 em.createQuery(
-                                "select c from ContratoReserva c join fetch c.reserva r " +
-                                        "where c.solicitud.id = :sid and r.efectiva = true", ContratoReserva.class)
+                                "select c from ContratoReserva c join fetch c.reserva " +
+                                        "where c.solicitud.id = :sid", ContratoReserva.class)
                         .setParameter("sid", solicitudId)
                         .getResultList().stream()
                         .map(ContratoReserva::getReserva)
                         .findFirst().orElse(null));
+    }
+
+    /** Deletes every ContratoReserva row (cleanup before reservas/solicitudes). */
+    public long eliminarContratos() {
+        return JpaUtil.enTransaccion(em ->
+                (long) em.createQuery("delete from ContratoReserva c").executeUpdate());
     }
 
     /** Deletes every solicitud (cascades blocks and contracts). */

@@ -18,12 +18,15 @@ import jakarta.persistence.UniqueConstraint;
 
 /**
  * Association class between {@link Solicitud} and {@link Reserva} recording the
- * relaxation under which the reserva was accepted. Unique on
- * {@code (solicitud_id, reserva_id)}: one contract per pair.
+ * relaxation under which the reserva was accepted. This is the ONLY link
+ * between both entities: {@code solicitud_id} and {@code reserva_id} are each
+ * NOT NULL and UNIQUE (one contract per side).
  */
 @Entity
 @Table(name = "contrato_reserva",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"solicitud_id", "reserva_id"}))
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = "solicitud_id"),
+                @UniqueConstraint(columnNames = "reserva_id")})
 public class ContratoReserva {
 
     @Id
@@ -80,6 +83,10 @@ public class ContratoReserva {
 
     public Reserva getReserva() {
         return reserva;
+    }
+
+    public void setReserva(Reserva reserva) {
+        this.reserva = reserva;
     }
 
     public boolean isFechasRelajadas() {

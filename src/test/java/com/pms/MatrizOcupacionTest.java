@@ -4,9 +4,12 @@ import com.pms.controllers.ControladorHabitaciones;
 import com.pms.controllers.ControladorPersonas;
 import com.pms.controllers.ControladorReservas;
 import com.pms.controllers.ControladorReservas.OcupacionHabitacion;
+import com.pms.dtos.PerfilRelajacion;
+import com.pms.entities.ContratoReserva;
 import com.pms.entities.Habitacion;
 import com.pms.entities.RHPropuesta;
 import com.pms.entities.Reserva;
+import com.pms.entities.Solicitud;
 import com.pms.entities.TitularReserva;
 import com.pms.persistence.JpaUtil;
 import com.pms.persistence.RepositorioRHPropuestas;
@@ -74,7 +77,8 @@ class MatrizOcupacionTest {
         TitularReserva titular = altaTitular();
         JpaUtil.enTransaccion(em -> {
             Habitacion hab = em.find(Habitacion.class, habitacionId);
-            Reserva r = new Reserva(em.merge(titular));
+            TitularReserva gestionado = em.merge(titular);
+            Reserva r = new Reserva(gestionado);
             RHPropuesta p = new RHPropuesta(inicio, fin, hab.getAtributos(), 1000.0f,
                     TipoMoneda.USD, 1, 0, 0);
             p.setHabitacion(hab);
@@ -84,7 +88,11 @@ class MatrizOcupacionTest {
             r.setMontoSenia(0.0f);
             r.setMoneda(TipoMoneda.USD);
             r.setEstado(EstadoReserva.PendienteDePago);
+            // Toda reserva persistida queda vinculada por un contrato (cardinalidad 1:1).
+            Solicitud s = new Solicitud(gestionado);
+            s.addContrato(new ContratoReserva(s, r, PerfilRelajacion.POR_DEFECTO));
             em.persist(r);
+            em.persist(s);
             return null;
         });
     }

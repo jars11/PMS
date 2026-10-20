@@ -26,11 +26,12 @@ public final class TestUtil {
     }
 
     /**
-     * Resets every table. Order matters because of FKs: solicitudes go first
-     * (they cascade their contratos, whose reserva_id points at reservas),
-     * then reservas, personas and habitaciones.
+     * Resets every table. Order matters because of FKs: contratos first (their
+     * solicitud_id/reserva_id point at both sides), then solicitudes, reservas,
+     * personas and habitaciones.
      */
     public static void limpiarBase() {
+        new RepositorioSolicitudes().eliminarContratos();
         new RepositorioSolicitudes().eliminarTodas();
         new RepositorioReservas().eliminarTodas();
         new RepositorioPersonas().eliminarTodas();

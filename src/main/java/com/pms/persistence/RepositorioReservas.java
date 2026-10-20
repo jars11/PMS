@@ -14,7 +14,14 @@ import java.util.List;
  */
 public class RepositorioReservas {
 
-    /** Persists a new reservation (or merges an existing one). */
+    /**
+     * Public escape hatch: persists a new reservation (or merges an existing
+     * one) without creating its contract. The one-contract invariant is
+     * guaranteed by the controller creation path
+     * ({@code ControladorReservas.persistirReservaYSolicitud}); callers that
+     * bypass it own the cardinality themselves. Kept for direct fixtures and
+     * legacy callers.
+     */
     public Reserva guardar(Reserva reserva) {
         return JpaUtil.enTransaccion(em -> {
             if (reserva.getId() == null) {

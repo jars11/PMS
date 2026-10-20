@@ -71,21 +71,6 @@ public class Solicitud {
         contratos.add(contrato);
     }
 
-    /**
-     * Marca {@code nueva} como efectiva y desmarca cualquier otra reserva
-     * efectiva de esta solicitud. Regla de dominio (no de base de datos): a lo
-     * sumo una reserva efectiva por solicitud, cero permitido.
-     */
-    public void promoverEfectiva(Reserva nueva) {
-        for (ContratoReserva contrato : contratos) {
-            Reserva reserva = contrato.getReserva();
-            if (reserva != null && reserva.isEfectiva() && !reserva.equals(nueva)) {
-                reserva.setEfectiva(false);
-            }
-        }
-        nueva.setEfectiva(true);
-    }
-
     @Override
     public String toString() {
         return "Solicitud{id=" + id + ", bloques=" + rhsolicitadas.size()
