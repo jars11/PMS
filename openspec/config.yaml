@@ -1,0 +1,76 @@
+schema: spec-driven
+
+# SDD execution decisions (resolved in preflight).
+execution_mode: auto
+delivery:
+  strategy: single-pr
+  review_budget_lines: 2000
+
+context: |
+  Project: pms — hotel Property Management System (Java 21 + Maven).
+  Stack: JPA/Hibernate ORM 6.4.4.Final, H2 2.2.224 (embedded file and in-memory).
+  Architecture: UI (Swing/console) -> controllers -> handlers (chain of responsibility) -> persistence repositories -> JPA entities; DT* DTOs at boundaries.
+  Entry points: com.pms.ui.PmsApp (default exec mainClass), com.pms.Main (console demo), com.pms.ui.MainUI (legacy Swing demo).
+  Testing: JUnit 5 via Maven Surefire; in-memory H2 through the pms-test persistence unit; 25 test classes under src/test/java/com/pms.
+  Style: Spanish comments, English identifiers; no linter, formatter, or CI configured.
+  Docs: README.md (overview, commands, diagrams), AGENTS.md (evidence-mandatory anti-hallucination rules).
+
+# Strict TDD resolved via runner-exists fallback: no agent marker or prior config existed,
+# but `mvn -B test` and JUnit 5 tests are present.
+strict_tdd: true
+
+testing:
+  mode: strict
+  resolved_from: runner-exists-fallback
+  last_verified: 2026-10-17
+  verified_test_count: 226
+  verified_test_classes: 25
+  runner: maven
+  test_command: "mvn -B test"
+  build_command: "mvn -B -DskipTests package"
+  framework: "JUnit 5 (junit-jupiter 5.10.2, junit-platform-launcher 1.10.2)"
+  surefire: "3.2.5"
+  test_layers:
+    unit: true
+    integration: true
+    e2e: false
+  integration_tool: "In-memory H2 via the pms-test persistence unit (no Testcontainers)"
+  coverage:
+    available: false
+    command: null
+    threshold: 0
+  quality:
+    linter: null
+    type_checker: "javac (maven-compiler-plugin 3.13.0, release 21)"
+    formatter: null
+
+rules:
+  proposal:
+    - Include a rollback plan for risky changes.
+    - Name the affected layers (controllers, handlers, persistence, ui, entities) explicitly.
+  specs:
+    - Use Given/When/Then for scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - State persistence impact (JPA entities and persistence.xml units) when relevant.
+  design:
+    - Document architecture decisions with rationale.
+    - Preserve the existing handler chain and repository boundaries unless the change requires otherwise.
+    - Include sequence diagrams for complex flows.
+  tasks:
+    - Group by phase and use hierarchical numbering.
+    - Keep tasks completable in one session.
+    - Pair every behavior-changing task with its test task (strict TDD).
+  apply:
+    guidelines:
+      - Follow existing code patterns and package layout.
+      - Keep the Spanish-comments / English-identifiers convention.
+      - Do not change the entity lists in src/main/resources/META-INF/persistence.xml without a spec reason.
+      - Do not modify src/test/java outside the scope of the active change.
+    tdd: true
+    test_command: "mvn -B test"
+  verify:
+    test_command: "mvn -B test"
+    build_command: "mvn -B -DskipTests package"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.
