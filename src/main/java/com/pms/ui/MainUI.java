@@ -188,8 +188,7 @@ public final class MainUI {
                     checkIn, checkOut, matrimonios, adultosSeparados, ninos, solicitados);
             areaResultado.setText(formatearResultado(resultado));
         } catch (IllegalArgumentException excepcion) {
-            JOptionPane.showMessageDialog(null, excepcion.getMessage(),
-                    "Datos inválidos", JOptionPane.ERROR_MESSAGE);
+            DialogoError.mostrar(null, "Datos inválidos", excepcion.getMessage());
         }
     }
 

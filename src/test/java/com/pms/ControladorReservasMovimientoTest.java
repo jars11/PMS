@@ -182,15 +182,33 @@ class ControladorReservasMovimientoTest {
     }
 
     @Test
-    void distribucionCamas() {
+    void mueveParejasACamasIndividualesSiNoHayMatrimoniales() {
         long h201 = idHabitacion(201);
         long h103 = idHabitacion(103);
-        Reserva original = cr.crearReservaPara(altaTitular(), h201, D1, D4, 2, 0, 0); // 2 matrimoniales
+        Reserva original = cr.crearReservaPara(altaTitular(), h201, D1, D4, 2, 0, 0); // 2 parejas
 
         ResultadoMovimiento res = cr.moverReserva(original.getId(), h201, D1, h103);
 
+        assertTrue(res.movida());
+        assertNull(res.motivo());
+        RHPropuesta movida = cargarReserva(original.getId()).getRHPropuestas().iterator().next();
+        assertEquals(1, movida.getCamasMatrimoniales(), "103 solo tiene una matrimonial");
+        assertEquals(2, movida.getCamasIndividuales(), "la otra pareja usa las dos individuales");
+        assertEquals(2, movida.getCantMatrimonios());
+        assertEquals(0, movida.getCantPersonasIndividuales());
+        assertEquals(5400.0f, movida.getSubtotal(), 0.001f); // 3 x 1800 (hab 103)
+    }
+
+    @Test
+    void capacidadInsuficiente() {
+        long h201 = idHabitacion(201);
+        long h101 = idHabitacion(101);
+        Reserva original = cr.crearReservaPara(altaTitular(), h201, D1, D4, 2, 0, 0); // 4 personas
+
+        ResultadoMovimiento res = cr.moverReserva(original.getId(), h201, D1, h101);
+
         assertFalse(res.movida());
-        assertEquals(MotivoRechazo.DISTRIBUCION_CAMAS, res.motivo());
+        assertEquals(MotivoRechazo.CAPACIDAD_INSUFICIENTE, res.motivo());
         assertSinMutacion(original.getId(), h201, 7800.0f); // 3 x 2600 (hab 201)
     }
 

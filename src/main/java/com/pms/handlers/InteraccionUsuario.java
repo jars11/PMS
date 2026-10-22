@@ -18,6 +18,15 @@ public interface InteraccionUsuario {
     boolean confirmar(String pregunta);
 
     /**
+     * Variante con titulo de ventana. Por defecto ignora el titulo y delega en
+     * {@link #confirmar(String)}; la UI lo usa para mostrar avisos + pregunta en
+     * una sola ventana.
+     */
+    default boolean confirmar(String titulo, String pregunta) {
+        return confirmar(pregunta);
+    }
+
+    /**
      * Notifica al usuario un mensaje informativo (no requiere respuesta).
      *
      * @param mensaje texto a mostrar

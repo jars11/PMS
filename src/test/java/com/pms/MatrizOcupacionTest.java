@@ -222,4 +222,129 @@ class MatrizOcupacionTest {
         assertEquals(1, hab103.bloques().size());
         assertTrue(hab103.bloques().get(0).lateCheckout());
     }
+
+    /**
+     * El check-out que cae en el PRIMER dia visible no ocupa la noche pero su
+     * cola debe seguir pintandose: sin este borde, al avanzar los dias los
+     * check-out desaparecian antes de tiempo.
+     */
+    @Test
+    void checkoutEnElPrimerDiaVisibleConservaSuCola() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        Reserva creada = cr.crearReservaPara(altaTitular(), idHabitacion(103),
+                INICIO.minusDays(1), INICIO, 1, 1, 0);
+
+        OcupacionHabitacion hab103 = porNumero(cr.matrizOcupacion(INICIO, INICIO.plusDays(14)), 103);
+
+        assertEquals(1, hab103.bloques().size(), "el bloque de salida sigue en la ventana");
+        assertEquals(creada.getId(), hab103.bloques().get(0).reservaId());
+        assertEquals(INICIO, hab103.bloques().get(0).fechaFin());
+        assertTrue(hab103.nochesOcupadas().isEmpty(), "la noche anterior no cae en la ventana");
+    }
+
+    @Test
+    void bloqueExponeTitularPersonasYBebes() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        cr.crearReservaAutomatica(altaTitular(), INICIO, INICIO.plusDays(3),
+                1, 1, 2, 0, Set.of());
+
+        OcupacionHabitacion.BloqueNoche bloque = cr.matrizOcupacion(INICIO, INICIO.plusDays(14))
+                .stream()
+                .flatMap(o -> o.bloques().stream())
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("Agustin Rivero", bloque.titular());
+        assertEquals(3, bloque.personas(), "1 matrimonial = 2 personas + 1 individual");
+        assertEquals(2, bloque.bebes(), "los bebes no suman personas");
+    }
+
+    /** El puente del asistente conserva los conteos pedidos de personas y bebes. */
+    @Test
+    void persistirPropuestasConservaPersonasYBebesPedidos() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        Habitacion hab = JpaUtil.enTransaccion(
+                em -> em.find(Habitacion.class, idHabitacion(103)));
+        RHPropuesta propuesta = new RHPropuesta(INICIO, INICIO.plusDays(3), Set.of(),
+                5400.0f, TipoMoneda.USD, 1, 2, 0, 1, 1, 2);
+        propuesta.setHabitacion(hab);
+
+        cr.persistirPropuestas(altaTitular(), Set.of(propuesta));
+
+        OcupacionHabitacion.BloqueNoche bloque = porNumero(
+                cr.matrizOcupacion(INICIO, INICIO.plusDays(14)), 103).bloques().get(0);
+        assertEquals(3, bloque.personas(), "manda el conteo pedido, no la capacidad de las camas");
+        assertEquals(2, bloque.bebes());
+    }
+
+    /**
+     * Las camas y las cunas son recursos: una matrimonial puede ser usada por
+     * una sola persona y puede haber menos cunas que bebes. Los conteos
+     * explicitos de la propuesta son los que se muestran.
+     */
+    @Test
+    void losConteosExplicitosMandanSobreCamasYCunas() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        Habitacion hab = JpaUtil.enTransaccion(
+                em -> em.find(Habitacion.class, idHabitacion(103)));
+        RHPropuesta propuesta = new RHPropuesta(INICIO, INICIO.plusDays(2), Set.of(),
+                3600.0f, TipoMoneda.USD, 1, 0, 2, 0, 1, 1);
+        propuesta.setHabitacion(hab);
+
+        cr.persistirPropuestas(altaTitular(), Set.of(propuesta));
+
+        OcupacionHabitacion.BloqueNoche bloque = porNumero(
+                cr.matrizOcupacion(INICIO, INICIO.plusDays(14)), 103).bloques().get(0);
+        assertEquals(1, bloque.personas(), "1 persona aunque la matrimonial tenga capacidad 2");
+        assertEquals(1, bloque.bebes(), "1 bebe aunque haya 2 cunas");
+    }
+
+    @Test
+    void redimensionarReservaCambiaElRangoYRecalculaElSubtotal() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        long habitacionId = idHabitacion(103);
+        Reserva creada = cr.crearReservaPara(altaTitular(), habitacionId,
+                INICIO, INICIO.plusDays(2), 1, 1, 0);
+        float tarifa = JpaUtil.enTransaccion(em -> em.find(Habitacion.class, habitacionId))
+                .getTarifaPorNoche();
+
+        cr.redimensionarReserva(creada.getId(), habitacionId, INICIO,
+                INICIO, INICIO.plusDays(4));
+
+        OcupacionHabitacion hab103 = porNumero(
+                cr.matrizOcupacion(INICIO, INICIO.plusDays(14)), 103);
+        assertEquals(4, hab103.nochesOcupadas().size());
+        assertEquals(4 * tarifa, hab103.bloques().get(0).subtotal(), 0.001f,
+                "el subtotal se recalcula con las noches nuevas");
+    }
+
+    @Test
+    void redimensionarReservaRechazaSolapamientoConOtraReserva() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        long habitacionId = idHabitacion(103);
+        Reserva creada = cr.crearReservaPara(altaTitular(), habitacionId,
+                INICIO, INICIO.plusDays(2), 1, 1, 0);
+        cr.crearReservaPara(altaTitular(), habitacionId,
+                INICIO.plusDays(4), INICIO.plusDays(6), 1, 1, 0);
+
+        assertThrows(IllegalStateException.class, () -> cr.redimensionarReserva(
+                creada.getId(), habitacionId, INICIO, INICIO, INICIO.plusDays(5)));
+    }
+
+    /**
+     * Una cuna no es una persona: la etiqueta la cuenta como bebe. Con 1 cama
+     * matrimonial y 2 cunas el bloque muestra 2 personas + 2 bebes.
+     */
+    @Test
+    void lasCunasCuentanComoBebesYNoComoPersonas() {
+        ControladorReservas cr = ControladorReservas.getInstance();
+        cr.crearReservaPara(altaTitular(), idHabitacion(103),
+                INICIO, INICIO.plusDays(2), 1, 0, 2);
+
+        OcupacionHabitacion.BloqueNoche bloque = porNumero(
+                cr.matrizOcupacion(INICIO, INICIO.plusDays(14)), 103).bloques().get(0);
+
+        assertEquals(2, bloque.personas(), "la cuna no suma personas");
+        assertEquals(2, bloque.bebes(), "cada cuna se muestra como un bebe");
+    }
 }

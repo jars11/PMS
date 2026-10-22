@@ -15,6 +15,7 @@ import com.pms.entities.RHSolicitada;
 import com.pms.entities.Reserva;
 import com.pms.entities.Solicitud;
 import com.pms.entities.TitularReserva;
+import com.pms.handlers.AsignacionCamas;
 import com.pms.handlers.ManejadorAtributosHabs;
 import com.pms.handlers.ManejadorCapacidad;
 import com.pms.handlers.ManejadorDisponibilidad;
@@ -35,6 +36,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -90,10 +92,28 @@ public class ControladorReservas {
         /**
          * Un bloque de estadia de una reserva ACTIVA tal como lo pinta el
          * calendario: fechas de la propuesta (rango half-open {@code [inicio,fin)})
-         * mas el flag {@code lateCheckout} de la reserva due\u00f1a.
+         * mas el flag {@code lateCheckout} de la reserva due\u00f1a, los datos
+         * de la etiqueta (titular y conteo de personas/bebes del bloque; las
+         * cunas se muestran como bebes, nunca como personas) y los datos de la
+         * reserva que se muestran al pasar el mouse por la barra.
          */
         public record BloqueNoche(long reservaId, LocalDate fechaInicio, LocalDate fechaFin,
-                                  boolean lateCheckout) {
+                                  boolean lateCheckout, String titular, int personas, int bebes,
+                                  float subtotal, TipoMoneda moneda, EstadoReserva estado) {
+
+            /** Back-compat: bloque sin datos de reserva. */
+            public BloqueNoche(long reservaId, LocalDate fechaInicio, LocalDate fechaFin,
+                               boolean lateCheckout, String titular, int personas, int bebes) {
+                this(reservaId, fechaInicio, fechaFin, lateCheckout, titular, personas, bebes,
+                        0.0f, TipoMoneda.USD, null);
+            }
+
+            /** Back-compat: bloque sin datos de etiqueta. */
+            public BloqueNoche(long reservaId, LocalDate fechaInicio, LocalDate fechaFin,
+                               boolean lateCheckout) {
+                this(reservaId, fechaInicio, fechaFin, lateCheckout, "", 0, 0,
+                        0.0f, TipoMoneda.USD, null);
+            }
         }
 
         /** Compact ctor: normaliza colecciones nulas a vacias. */
@@ -145,7 +165,8 @@ public class ControladorReservas {
                                  String titular, LocalDate checkIn, LocalDate checkOut,
                                  int camasMatrimoniales, int camasIndividuales, int cunas,
                                  EstadoReserva estado, boolean lateCheckout,
-                                 Set<AtributoHabitacion> atributos) {
+                                 Set<AtributoHabitacion> atributos,
+                                 int cantMatrimonios, int cantPersonasIndividuales, int cantBebes) {
     }
 
     // ---------------------------------------------------------------- mappers
@@ -284,7 +305,8 @@ public class ControladorReservas {
                 RHPropuesta rp = new RHPropuesta(s.getFechaInicio(), s.getFechaFin(),
                         habitacion.getAtributos(),
                         prop.getSubtotal(), prop.getMoneda(),
-                        prop.getCamasMatrimoniales(), prop.getCamasIndividuales(), prop.getCunas());
+                        prop.getCamasMatrimoniales(), prop.getCamasIndividuales(), prop.getCunas(),
+                        s.getCantMatrimonios(), s.getCantIndividuales(), s.getCantBebes());
                 rp.setHabitacion(em.merge(habitacion));
                 r.addRHPropuesta(rp);
                 // Espeja SOLO los bloques consumidos: los saltados por los filtros no se espejan.
@@ -420,6 +442,84 @@ public class ControladorReservas {
     }
 
     /**
+     * Crea una reserva ACTIVA para una habitacion explicita a partir de las
+     * PERSONAS pedidas (parejas/matrimonios, personas individuales y bebes). La
+     * asignacion fisica de camas, colchones y cunas se calcula con
+     * {@link AsignacionCamas} segun los recursos de la habitacion. Una sola
+     * transaccion; los argumentos se validan antes de abrirla.
+     */
+    public Reserva crearReservaParaPersonas(TitularReserva titular, long habitacionId,
+                                            LocalDate checkIn, LocalDate checkOut,
+                                            int parejas, int personasIndividuales, int bebes,
+                                            Set<AtributoHabitacion> atributos) {
+        return crearReservaParaPersonas(titular, habitacionId, checkIn, checkOut,
+                parejas, personasIndividuales, bebes, atributos, PerfilRelajacion.POR_DEFECTO);
+    }
+
+    /** Variante con perfil de relajacion explicito. */
+    public Reserva crearReservaParaPersonas(TitularReserva titular, long habitacionId,
+                                            LocalDate checkIn, LocalDate checkOut,
+                                            int parejas, int personasIndividuales, int bebes,
+                                            Set<AtributoHabitacion> atributos,
+                                            PerfilRelajacion perfil) {
+        if (titular == null || checkIn == null || checkOut == null || !checkIn.isBefore(checkOut)) {
+            throw new IllegalArgumentException("fechas/titular invalidos");
+        }
+        if (parejas < 0 || personasIndividuales < 0 || bebes < 0) {
+            throw new IllegalArgumentException("personas negativas");
+        }
+
+        return JpaUtil.enTransaccion(em -> {
+            Habitacion hab = em.find(Habitacion.class, habitacionId);
+            if (hab == null) {
+                throw new IllegalArgumentException("habitacion no existe: " + habitacionId);
+            }
+            AsignacionCamas.Asignacion asignacion = asignar(hab, parejas, personasIndividuales, bebes);
+
+            verificarGuardaLimpieza(em, habitacionId, checkIn, hab.isLimpia());
+
+            Long solapadas = em.createQuery(
+                            "select count(r) from Reserva r join r.rhPropuestas p " +
+                                    "where r.activa = true and p.habitacion.id = :hid " +
+                                    "and p.fechaInicio < :hasta and :desde < p.fechaFin", Long.class)
+                    .setParameter("hid", habitacionId)
+                    .setParameter("desde", checkIn)
+                    .setParameter("hasta", checkOut)
+                    .getSingleResult();
+            if (solapadas != null && solapadas > 0) {
+                throw new IllegalStateException("habitacion ocupada: " + habitacionId);
+            }
+
+            TitularReserva titularGestionado = em.merge(titular);
+            Reserva r = new Reserva(titularGestionado);
+            long noches = ChronoUnit.DAYS.between(checkIn, checkOut);
+            float subtotal = noches * hab.getTarifaPorNoche();
+
+            Set<AtributoHabitacion> atributosPropuesta =
+                    atributos != null ? new TreeSet<>(atributos) : hab.getAtributos();
+            RHPropuesta rp = new RHPropuesta(checkIn, checkOut, atributosPropuesta, subtotal,
+                    TipoMoneda.USD, asignacion.camasMatrimoniales(),
+                    asignacion.camasIndividuales(), asignacion.cunas(),
+                    parejas, personasIndividuales, bebes);
+            rp.setHabitacion(hab);
+            r.addRHPropuesta(rp);
+
+            r.setActiva(true);
+            r.setMontoTotal(subtotal);
+            r.setMontoSenia(0.0f);
+            r.setMoneda(TipoMoneda.USD);
+            r.setEstado(EstadoReserva.PendienteDePago);
+
+            Solicitud solicitud = new Solicitud(titularGestionado);
+            solicitud.addRHSolicitada(new RHSolicitada(checkIn, checkOut, atributosPropuesta,
+                    parejas, personasIndividuales, bebes, asignacion.cunas()));
+
+            persistirReservaYSolicitud(em, r, solicitud, perfil);
+            return r;
+        });
+    }
+
+    /**
      * Crea una reserva ACTIVA eligiendo la habitacion AUTOMATICAMENTE dentro de
      * UNA unica transaccion (D5). Los argumentos baratos se validan ANTES de
      * abrir la transaccion; dentro de la misma se resuelve la habitacion con
@@ -483,7 +583,7 @@ public class ControladorReservas {
             float subtotal = noches * habGestionada.getTarifaPorNoche();
 
             RHPropuesta rp = new RHPropuesta(checkIn, checkOut, habGestionada.getAtributos(), subtotal,
-                    TipoMoneda.USD, camasMatrimoniales, camasIndividuales, cunas);
+                    TipoMoneda.USD, camasMatrimoniales, camasIndividuales, cunas, cantBebes);
             rp.setHabitacion(habGestionada);
             r.addRHPropuesta(rp);
 
@@ -496,6 +596,86 @@ public class ControladorReservas {
             // La solicitud espeja la peticion (incluye cantBebes), un unico bloque.
             Solicitud solicitudPersistida = new Solicitud(titularGestionado);
             solicitudPersistida.addRHSolicitada(RHSolicitada.de(solicitud));
+
+            persistirReservaYSolicitud(em, r, solicitudPersistida, perfil);
+            return r;
+        });
+    }
+
+    /**
+     * Crea una reserva ACTIVA eligiendo la habitacion AUTOMATICAMENTE a partir
+     * de las PERSONAS pedidas. La habitacion se resuelve con
+     * {@link ManejadorAtributosHabs} y la asignacion fisica con
+     * {@link AsignacionCamas}. Una sola transaccion.
+     */
+    public Reserva crearReservaAutomaticaPersonas(TitularReserva titular, LocalDate checkIn,
+                                                  LocalDate checkOut, int parejas,
+                                                  int personasIndividuales, int bebes,
+                                                  Set<AtributoHabitacion> atributos) {
+        return crearReservaAutomaticaPersonas(titular, checkIn, checkOut, parejas,
+                personasIndividuales, bebes, atributos, PerfilRelajacion.POR_DEFECTO);
+    }
+
+    /** Variante con perfil de relajacion explicito. */
+    public Reserva crearReservaAutomaticaPersonas(TitularReserva titular, LocalDate checkIn,
+                                                  LocalDate checkOut, int parejas,
+                                                  int personasIndividuales, int bebes,
+                                                  Set<AtributoHabitacion> atributos,
+                                                  PerfilRelajacion perfil) {
+        if (titular == null || checkIn == null || checkOut == null || !checkIn.isBefore(checkOut)) {
+            throw new IllegalArgumentException("fechas/titular invalidos");
+        }
+        if (parejas < 0 || personasIndividuales < 0 || bebes < 0) {
+            throw new IllegalArgumentException("personas negativas");
+        }
+
+        return JpaUtil.enTransaccion(em -> {
+            DTRHSolicitada pedido = new DTRHSolicitada(checkIn, checkOut, atributos,
+                    parejas, personasIndividuales, bebes, 0);
+
+            Habitacion hab = new ManejadorAtributosHabs().brindarHabitacionesDisponibles(pedido);
+            if (hab == null) {
+                throw new IllegalStateException("sin habitacion disponible");
+            }
+            Habitacion habGestionada = em.merge(hab);
+            AsignacionCamas.Asignacion asignacion =
+                    asignar(habGestionada, parejas, personasIndividuales, bebes);
+
+            verificarGuardaLimpieza(em, habGestionada.getId(), checkIn, habGestionada.isLimpia());
+
+            Long solapadas = em.createQuery(
+                            "select count(r) from Reserva r join r.rhPropuestas p " +
+                                    "where r.activa = true and p.habitacion.id = :hid " +
+                                    "and p.fechaInicio < :hasta and :desde < p.fechaFin", Long.class)
+                    .setParameter("hid", habGestionada.getId())
+                    .setParameter("desde", checkIn)
+                    .setParameter("hasta", checkOut)
+                    .getSingleResult();
+            if (solapadas != null && solapadas > 0) {
+                throw new IllegalStateException("habitacion ocupada: " + habGestionada.getId());
+            }
+
+            TitularReserva titularGestionado = em.merge(titular);
+            Reserva r = new Reserva(titularGestionado);
+            long noches = ChronoUnit.DAYS.between(checkIn, checkOut);
+            float subtotal = noches * habGestionada.getTarifaPorNoche();
+
+            RHPropuesta rp = new RHPropuesta(checkIn, checkOut, habGestionada.getAtributos(), subtotal,
+                    TipoMoneda.USD, asignacion.camasMatrimoniales(),
+                    asignacion.camasIndividuales(), asignacion.cunas(),
+                    parejas, personasIndividuales, bebes);
+            rp.setHabitacion(habGestionada);
+            r.addRHPropuesta(rp);
+
+            r.setActiva(true);
+            r.setMontoTotal(subtotal);
+            r.setMontoSenia(0.0f);
+            r.setMoneda(TipoMoneda.USD);
+            r.setEstado(EstadoReserva.PendienteDePago);
+
+            Solicitud solicitudPersistida = new Solicitud(titularGestionado);
+            solicitudPersistida.addRHSolicitada(new RHSolicitada(checkIn, checkOut,
+                    atributos, parejas, personasIndividuales, bebes, asignacion.cunas()));
 
             persistirReservaYSolicitud(em, r, solicitudPersistida, perfil);
             return r;
@@ -532,7 +712,8 @@ public class ControladorReservas {
                     objetivo.getFechaInicio(), objetivo.getFechaFin(),
                     objetivo.getCamasMatrimoniales(), objetivo.getCamasIndividuales(),
                     objetivo.getCunas(), r.getEstado(), r.isLateCheckout(),
-                    new TreeSet<>(objetivo.getAtributosHabitacion()));
+                    new TreeSet<>(objetivo.getAtributosHabitacion()),
+                    parejasDe(objetivo), personasIndividualesDe(objetivo), bebesDe(objetivo));
         });
     }
 
@@ -612,7 +793,81 @@ public class ControladorReservas {
                     atributos != null ? new TreeSet<>(atributos) : habNueva.getAtributos();
             RHPropuesta nueva = new RHPropuesta(checkIn, checkOut, atributosPropuesta,
                     noches * habNueva.getTarifaPorNoche(), TipoMoneda.USD,
-                    camasMatrimoniales, camasIndividuales, cunas);
+                    camasMatrimoniales, camasIndividuales, cunas, objetivo.getCantBebes(),
+                    objetivo.getCantPersonas());
+            nueva.setHabitacion(habNueva);
+            r.addRHPropuesta(nueva);
+
+            r.setEstado(estado);
+            float total = 0.0f;
+            for (RHPropuesta p : r.getRHPropuestas()) {
+                total += p.getSubtotal();
+            }
+            r.setMontoTotal(total);
+            return r;
+        });
+    }
+
+    /**
+     * Edita UNA propuesta a partir de las PERSONAS pedidas. La asignacion
+     * fisica se recalcula para la habitacion nueva con {@link AsignacionCamas}.
+     * Una sola transaccion; valida titular/fechas/estado antes de abrirla.
+     */
+    public Reserva actualizarReservaPersonas(long reservaId, long habitacionClickId,
+                                             LocalDate nocheClick, TitularReserva titular,
+                                             long habitacionNuevaId, LocalDate checkIn,
+                                             LocalDate checkOut, int parejas,
+                                             int personasIndividuales, int bebes,
+                                             EstadoReserva estado,
+                                             Set<AtributoHabitacion> atributos) {
+        if (titular == null || nocheClick == null || checkIn == null || checkOut == null
+                || !checkIn.isBefore(checkOut)) {
+            throw new IllegalArgumentException("fechas/titular invalidos");
+        }
+        if (parejas < 0 || personasIndividuales < 0 || bebes < 0) {
+            throw new IllegalArgumentException("personas negativas");
+        }
+        if (estado == null) {
+            throw new IllegalArgumentException("estado invalido");
+        }
+
+        return JpaUtil.enTransaccion(em -> {
+            Reserva r = em.find(Reserva.class, reservaId);
+            if (r == null) {
+                throw new IllegalArgumentException("reserva no existe: " + reservaId);
+            }
+            r.setTitular(em.merge(titular));
+
+            Habitacion habNueva = em.find(Habitacion.class, habitacionNuevaId);
+            if (habNueva == null) {
+                throw new IllegalArgumentException("habitacion no existe: " + habitacionNuevaId);
+            }
+            AsignacionCamas.Asignacion asignacion =
+                    asignar(habNueva, parejas, personasIndividuales, bebes);
+
+            RHPropuesta objetivo = propuestaQueCubre(r, habitacionClickId, nocheClick);
+
+            Long solapadas = em.createQuery(
+                            "select count(r) from Reserva r join r.rhPropuestas p " +
+                                    "where r.activa = true and r.id <> :rid and p.habitacion.id = :hid " +
+                                    "and p.fechaInicio < :hasta and :desde < p.fechaFin", Long.class)
+                    .setParameter("rid", reservaId)
+                    .setParameter("hid", habitacionNuevaId)
+                    .setParameter("desde", checkIn)
+                    .setParameter("hasta", checkOut)
+                    .getSingleResult();
+            if (solapadas != null && solapadas > 0) {
+                throw new IllegalStateException("habitacion ocupada: " + habitacionNuevaId);
+            }
+
+            r.removeRHPropuesta(objetivo.getId().intValue());
+            long noches = ChronoUnit.DAYS.between(checkIn, checkOut);
+            Set<AtributoHabitacion> atributosPropuesta =
+                    atributos != null ? new TreeSet<>(atributos) : habNueva.getAtributos();
+            RHPropuesta nueva = new RHPropuesta(checkIn, checkOut, atributosPropuesta,
+                    noches * habNueva.getTarifaPorNoche(), TipoMoneda.USD,
+                    asignacion.camasMatrimoniales(), asignacion.camasIndividuales(),
+                    asignacion.cunas(), parejas, personasIndividuales, bebes);
             nueva.setHabitacion(habNueva);
             r.addRHPropuesta(nueva);
 
@@ -640,7 +895,68 @@ public class ControladorReservas {
 
     /** Nombre para mostrar de un titular: nombres + apellidos. */
     private static String nombreTitular(TitularReserva t) {
+        if (t == null) {
+            return "";
+        }
         return (String.join(" ", t.getNombres()) + " " + String.join(" ", t.getApellidos())).trim();
+    }
+
+    /**
+     * Personas que ocupan un bloque. La fuente nueva es el desglose por
+     * categoria (parejas + personas individuales). Si el desglose esta vacio se
+     * usa el total pedido (filas viejas) y, por ultimo, la capacidad de las
+     * camas. Las cunas y los bebes NUNCA suman personas.
+     */
+    private static int personasDelBloque(RHPropuesta p) {
+        if (tieneDesglose(p)) {
+            return RHPropuesta.personasDeCategorias(
+                    p.getCantMatrimonios(), p.getCantPersonasIndividuales());
+        }
+        if (p.getCantPersonas() > 0) {
+            return p.getCantPersonas();
+        }
+        return RHPropuesta.personasDerivadas(p.getCamasMatrimoniales(), p.getCamasIndividuales());
+    }
+
+    /** True cuando la propuesta trae el desglose nuevo de personas. */
+    private static boolean tieneDesglose(RHPropuesta p) {
+        return p.getCantMatrimonios() > 0 || p.getCantPersonasIndividuales() > 0;
+    }
+
+    /** Parejas de una propuesta; si es legacy se derivan de las camas. */
+    private static int parejasDe(RHPropuesta p) {
+        return tieneDesglose(p) ? p.getCantMatrimonios() : p.getCamasMatrimoniales();
+    }
+
+    /** Personas individuales de una propuesta; si es legacy se derivan de las camas. */
+    private static int personasIndividualesDe(RHPropuesta p) {
+        return tieneDesglose(p) ? p.getCantPersonasIndividuales() : p.getCamasIndividuales();
+    }
+
+    /** Bebes de una propuesta; si es legacy se derivan de las cunas. */
+    private static int bebesDe(RHPropuesta p) {
+        return p.getCantBebes() > 0 ? p.getCantBebes() : p.getCunas();
+    }
+
+    /**
+     * Bebes para la etiqueta: manda el conteo pedido. Solo si es 0 (filas
+     * viejas) se cae a las cunas. Las cunas son un recurso: puede haber menos
+     * cunas que bebes, por eso NO se toma el maximo. Las cunas nunca suman
+     * personas.
+     */
+    private static int bebesDelBloque(RHPropuesta p) {
+        return bebesDe(p);
+    }
+
+    /** Asignacion fisica validada para una cantidad de personas en una habitacion. */
+    private static AsignacionCamas.Asignacion asignar(Habitacion habitacion, int parejas,
+                                                      int personasIndividuales, int bebes) {
+        AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(
+                habitacion, parejas, personasIndividuales, bebes, true);
+        if (!asignacion.capacidadSuficiente()) {
+            throw new IllegalStateException(asignacion.avisoCapacidad());
+        }
+        return asignacion;
     }
 
     /**
@@ -681,15 +997,26 @@ public class ControladorReservas {
                 if (p == null || p.getHabitacion() == null || p.getHabitacion().getId() == null) {
                     throw new IllegalArgumentException("propuesta sin habitacion");
                 }
-                RHPropuesta nuevo = new RHPropuesta(p.getFechaInicio(), p.getFechaFin(),
-                        p.getAtributosHabitacion(), p.getSubtotal(), p.getMoneda(),
-                        p.getCamasMatrimoniales(), p.getCamasIndividuales(), p.getCunas());
+                RHPropuesta nuevo;
+                if (tieneDesglose(p)) {
+                    nuevo = new RHPropuesta(p.getFechaInicio(), p.getFechaFin(),
+                            p.getAtributosHabitacion(), p.getSubtotal(), p.getMoneda(),
+                            p.getCamasMatrimoniales(), p.getCamasIndividuales(), p.getCunas(),
+                            p.getCantMatrimonios(), p.getCantPersonasIndividuales(),
+                            p.getCantBebes());
+                } else {
+                    // Propuesta legacy sin desglose: se conserva su total explicito.
+                    nuevo = new RHPropuesta(p.getFechaInicio(), p.getFechaFin(),
+                            p.getAtributosHabitacion(), p.getSubtotal(), p.getMoneda(),
+                            p.getCamasMatrimoniales(), p.getCamasIndividuales(), p.getCunas(),
+                            p.getCantBebes(), p.getCantPersonas());
+                }
                 nuevo.setHabitacion(em.getReference(Habitacion.class, p.getHabitacion().getId()));
                 r.addRHPropuesta(nuevo);
-                // Una por propuesta detached; una RHPropuesta no lleva conteo de bebes.
+                // Una por propuesta detached; el bloque espeja el conteo explicito de bebes.
                 solicitud.addRHSolicitada(new RHSolicitada(p.getFechaInicio(), p.getFechaFin(),
-                        p.getAtributosHabitacion(), p.getCamasMatrimoniales(),
-                        p.getCamasIndividuales(), 0, p.getCunas()));
+                        p.getAtributosHabitacion(), parejasDe(p),
+                        personasIndividualesDe(p), p.getCantBebes(), p.getCunas()));
                 total += p.getSubtotal();
             }
 
@@ -861,15 +1188,23 @@ public class ControladorReservas {
 
             LocalDate ini = objetivo.getFechaInicio();
             LocalDate fin = objetivo.getFechaFin();
-            int m = objetivo.getCamasMatrimoniales();
-            int i = objetivo.getCamasIndividuales();
-            int cunas = objetivo.getCunas();
+            int parejas = parejasDe(objetivo);
+            int personasIndividuales = personasIndividualesDe(objetivo);
+            int bebes = bebesDe(objetivo);
             TipoMoneda moneda = objetivo.getMoneda();
+
+            AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(
+                    destino, parejas, personasIndividuales, bebes, true);
+            if (!asignacion.capacidadSuficiente()) {
+                return new ResultadoMovimiento(false, MotivoRechazo.CAPACIDAD_INSUFICIENTE);
+            }
 
             r.removeRHPropuesta(objetivo.getId().intValue());
             long noches = ChronoUnit.DAYS.between(ini, fin);
             RHPropuesta nueva = new RHPropuesta(ini, fin, destino.getAtributos(),
-                    noches * destino.getTarifaPorNoche(), moneda, m, i, cunas);
+                    noches * destino.getTarifaPorNoche(), moneda,
+                    asignacion.camasMatrimoniales(), asignacion.camasIndividuales(),
+                    asignacion.cunas(), parejas, personasIndividuales, bebes);
             nueva.setHabitacion(destino);
             r.addRHPropuesta(nueva);
 
@@ -884,8 +1219,86 @@ public class ControladorReservas {
     }
 
     /**
+     * Extiende o acorta la estadia de UNA propuesta conservando su habitacion y
+     * sus camas. La propuesta objetivo se identifica por (habitacion, noche).
+     * Corre en UNA transaccion: si el rango nuevo se solapa con otra reserva
+     * activa o choca con una limpieza de late check-out, lanza y hace rollback
+     * (nada se persiste). Recalcula {@code subtotal}/{@code montoTotal} con la
+     * tarifa de la habitacion.
+     *
+     * @return la reserva gestionada; queda detached al cerrar la transaccion.
+     */
+    public Reserva redimensionarReserva(long reservaId, long habitacionId, LocalDate nocheObjetivo,
+                                        LocalDate nuevoCheckIn, LocalDate nuevoCheckOut) {
+        if (nocheObjetivo == null || nuevoCheckIn == null || nuevoCheckOut == null
+                || !nuevoCheckIn.isBefore(nuevoCheckOut)) {
+            throw new IllegalArgumentException("fechas invalidas");
+        }
+        return JpaUtil.enTransaccion(em -> {
+            Reserva r = em.find(Reserva.class, reservaId);
+            if (r == null) {
+                throw new IllegalArgumentException("reserva no existe: " + reservaId);
+            }
+            RHPropuesta objetivo = propuestaQueCubre(r, habitacionId, nocheObjetivo);
+            Habitacion habitacion = objetivo.getHabitacion();
+            if (habitacion == null) {
+                throw new IllegalArgumentException("propuesta sin habitacion");
+            }
+
+            Long solapadas = em.createQuery(
+                            "select count(r) from Reserva r join r.rhPropuestas p " +
+                                    "where r.activa = true and r.id <> :rid and p.habitacion.id = :hid " +
+                                    "and p.fechaInicio < :hasta and :desde < p.fechaFin", Long.class)
+                    .setParameter("rid", reservaId)
+                    .setParameter("hid", habitacionId)
+                    .setParameter("desde", nuevoCheckIn)
+                    .setParameter("hasta", nuevoCheckOut)
+                    .getSingleResult();
+            if (solapadas != null && solapadas > 0) {
+                throw new IllegalStateException("habitacion ocupada: " + habitacionId);
+            }
+            verificarGuardaLimpieza(em, habitacionId, nuevoCheckIn, habitacion.isLimpia());
+            if (r.isLateCheckout()
+                    && existeCheckInDeOtraReservaEn(em, habitacionId, nuevoCheckOut, reservaId)) {
+                throw new IllegalStateException(
+                        "no se puede extender: hay otra reserva con check-in en el nuevo día de salida");
+            }
+
+            int matrimoniales = objetivo.getCamasMatrimoniales();
+            int individuales = objetivo.getCamasIndividuales();
+            int cunas = objetivo.getCunas();
+            int bebes = bebesDe(objetivo);
+            int parejas = parejasDe(objetivo);
+            int personasIndividuales = personasIndividualesDe(objetivo);
+            TipoMoneda moneda = objetivo.getMoneda();
+            Set<AtributoHabitacion> atributos = new TreeSet<>(objetivo.getAtributosHabitacion());
+
+            r.removeRHPropuesta(objetivo.getId().intValue());
+            long noches = ChronoUnit.DAYS.between(nuevoCheckIn, nuevoCheckOut);
+            RHPropuesta nueva = new RHPropuesta(nuevoCheckIn, nuevoCheckOut, atributos,
+                    noches * habitacion.getTarifaPorNoche(), moneda,
+                    matrimoniales, individuales, cunas, parejas,
+                    personasIndividuales, bebes);
+            nueva.setHabitacion(habitacion);
+            r.addRHPropuesta(nueva);
+
+            float total = 0.0f;
+            for (RHPropuesta p : r.getRHPropuestas()) {
+                total += p.getSubtotal();
+            }
+            r.setMontoTotal(total);
+            return r;
+        });
+    }
+
+    /**
      * Marca el flag {@code lateCheckout} de una reserva. Toggle operativo con
      * setter dedicado (no forma parte de la validacion estructural).
+     *
+     * <p>Marcar {@code lateCheckout=true} se rechaza cuando otra reserva activa
+     * de la misma habitacion tiene check-in el dia de salida de esta reserva:
+     * el late check-out extiende visualmente la estadia y chocaria con el
+     * ingreso nuevo. Destildar siempre se permite.
      */
     public Reserva marcarLateCheckout(long reservaId, boolean lateCheckout) {
         return JpaUtil.enTransaccion(em -> {
@@ -893,9 +1306,53 @@ public class ControladorReservas {
             if (r == null) {
                 throw new IllegalArgumentException("reserva no existe: " + reservaId);
             }
+            if (lateCheckout) {
+                validarLateCheckoutSinCheckInMismoDia(em, r);
+            }
             r.setLateCheckout(lateCheckout);
             return r;
         });
+    }
+
+    /**
+     * Rechaza marcar late check-out cuando otra reserva activa hace check-in el
+     * mismo dia en alguna de las habitaciones de la reserva. Las fechas y
+     * habitaciones salen de las {@code RHPropuestas} de la propia reserva: el
+     * fin de estadia es el mayor {@code fechaFin}. Corre dentro de la
+     * transaccion del llamador para no anidar {@link JpaUtil#enTransaccion}.
+     */
+    private static void validarLateCheckoutSinCheckInMismoDia(EntityManager em, Reserva reserva) {
+        LocalDate finEstadia = null;
+        Set<Long> habitaciones = new HashSet<>();
+        for (RHPropuesta p : reserva.getRHPropuestas()) {
+            if (p.getFechaFin() != null
+                    && (finEstadia == null || p.getFechaFin().isAfter(finEstadia))) {
+                finEstadia = p.getFechaFin();
+            }
+            if (p.getHabitacion() != null && p.getHabitacion().getId() != null) {
+                habitaciones.add(p.getHabitacion().getId());
+            }
+        }
+        if (finEstadia == null) {
+            return;
+        }
+        for (Long habitacionId : habitaciones) {
+            if (existeCheckInDeOtraReservaEn(em, habitacionId, finEstadia, reserva.getId())) {
+                throw new IllegalStateException(
+                        "no se puede marcar late check-out: hay una reserva con check-in el mismo día");
+            }
+        }
+    }
+
+    /**
+     * Read view for the calendar: true when an active late check-out stay in
+     * {@code habitacionId} ends exactly on {@code dia}.
+     */
+    public boolean hayLateCheckoutElDia(long habitacionId, LocalDate dia) {
+        if (dia == null) {
+            return false;
+        }
+        return JpaUtil.enTransaccion(em -> existeLateCheckoutTerminaEn(em, habitacionId, dia));
     }
 
     /**
@@ -912,13 +1369,21 @@ public class ControladorReservas {
         boolean checkInEnFin = existeCheckInEn(em, destino.getId(), fin);
         boolean lateTerminaEnIni = existeLateCheckoutTerminaEn(em, destino.getId(), ini);
 
+        AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(destino,
+                parejasDe(objetivo), personasIndividualesDe(objetivo), bebesDe(objetivo), true);
+        if (!asignacion.capacidadSuficiente()) {
+            return MotivoRechazo.CAPACIDAD_INSUFICIENTE;
+        }
+
         CompatibilidadMovimiento.BloqueMovido movido = new CompatibilidadMovimiento.BloqueMovido(
-                objetivo.getAtributosHabitacion(), objetivo.getCamasMatrimoniales(),
-                objetivo.getCamasIndividuales(), objetivo.getCunas(), ini, fin, reserva.isLateCheckout());
+                objetivo.getAtributosHabitacion(), asignacion.camasMatrimoniales(),
+                asignacion.camasIndividuales(), asignacion.cunas(), ini, fin,
+                reserva.isLateCheckout());
 
         CompatibilidadMovimiento.HabitacionDestino dst = new CompatibilidadMovimiento.HabitacionDestino(
                 destino.getId(), destino.getAtributos(), destino.getCantidadMatrimoniales(),
-                destino.getCantidadIndividuales(), destino.getCantidadCunas(), destino.capacidad(),
+                destino.getCantidadIndividuales() + destino.getColchones(),
+                destino.getCantidadCunas(), destino.capacidad() + destino.getColchones(),
                 destino.isLimpia(), libre, checkInEnFin, lateTerminaEnIni);
 
         return CompatibilidadMovimiento.evaluar(movido, dst);
@@ -945,6 +1410,25 @@ public class ControladorReservas {
                         "select count(r) from Reserva r join r.rhPropuestas p " +
                                 "where r.activa = true and p.habitacion.id = :hid and p.fechaInicio = :dia",
                         Long.class)
+                .setParameter("hid", habitacionId)
+                .setParameter("dia", dia)
+                .getSingleResult();
+        return n != null && n > 0;
+    }
+
+    /**
+     * True cuando OTRA reserva activa arranca exactamente en {@code dia} en la
+     * habitacion. Excluye la reserva en curso para no bloquearse a si misma
+     * cuando tiene varias propuestas en la misma habitacion.
+     */
+    private static boolean existeCheckInDeOtraReservaEn(EntityManager em, Long habitacionId,
+                                                        LocalDate dia, Long reservaExcluidaId) {
+        Long n = em.createQuery(
+                        "select count(r) from Reserva r join r.rhPropuestas p " +
+                                "where r.activa = true and r.id <> :rid and p.habitacion.id = :hid " +
+                                "and p.fechaInicio = :dia",
+                        Long.class)
+                .setParameter("rid", reservaExcluidaId)
                 .setParameter("hid", habitacionId)
                 .setParameter("dia", dia)
                 .getSingleResult();
@@ -1030,7 +1514,10 @@ public class ControladorReservas {
             if (reservaId != null && p.getFechaInicio() != null && p.getFechaFin() != null) {
                 bloquesPorHabitacion.computeIfAbsent(habitacionId, k -> new ArrayList<>())
                         .add(new OcupacionHabitacion.BloqueNoche(reservaId, p.getFechaInicio(),
-                                p.getFechaFin(), p.getReserva().isLateCheckout()));
+                                p.getFechaFin(), p.getReserva().isLateCheckout(),
+                                nombreTitular(p.getReserva().getTitular()),
+                                personasDelBloque(p), bebesDelBloque(p),
+                                p.getSubtotal(), p.getMoneda(), p.getReserva().getEstado()));
             }
         }
 

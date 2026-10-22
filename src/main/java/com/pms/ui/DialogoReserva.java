@@ -6,6 +6,7 @@ import com.pms.controllers.ControladorReservas;
 import com.pms.entities.Habitacion;
 import com.pms.entities.Reserva;
 import com.pms.entities.TitularReserva;
+import com.pms.handlers.AsignacionCamas;
 import com.pms.utils.AtributoHabitacion;
 import com.pms.utils.EstadoReserva;
 
@@ -24,8 +25,10 @@ import javax.swing.JTextField;
 import javax.swing.SpinnerDateModel;
 import javax.swing.SpinnerNumberModel;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
@@ -45,7 +48,7 @@ import java.util.TreeSet;
  * Dialogo modal de alta de una reserva manual para una habitacion explicita.
  * El titular se elige de un combo (titulares existentes) o se crea en el
  * momento ("nuevo titular") via {@code altaTitular}. Al guardar delega en
- * {@code ControladorReservas.crearReservaPara(...)}; los errores de negocio
+ * {@code ControladorReservas.crearReservaParaPersonas(...)}; los errores de negocio
  * (fechas invalidas, habitacion ocupada, etc.) se muestran en un
  * {@link JOptionPane} de error y el dialogo permanece abierto.
  *
@@ -70,10 +73,17 @@ public final class DialogoReserva extends JDialog {
     private final JComboBox<EstadoReserva> comboEstado = new JComboBox<>();
     private final JSpinner spinnerCheckIn = spinnerFecha(LocalDate.now());
     private final JSpinner spinnerCheckOut = spinnerFecha(LocalDate.now().plusDays(1));
-    private final JSpinner spinnerMatrimoniales = spinnerCantidad();
-    private final JSpinner spinnerIndividuales = spinnerCantidad();
-    private final JSpinner spinnerCunas = spinnerCantidad();
+    private final JSpinner spinnerParejas = spinnerCantidad();
+    private final JSpinner spinnerPersonasIndividuales = spinnerCantidad();
+    private final JSpinner spinnerBebes = spinnerBebes();
+    private final JLabel avisoParejas = avisoInline();
+    private final JLabel avisoPersonasIndividuales = avisoInline();
+    private final JLabel avisoBebes = avisoInline();
+    private final JLabel avisoCapacidad = avisoInline();
     private final JCheckBox checkLateCheckout = new JCheckBox();
+
+    /** Evita recursión al ajustar los topes de los spinners. */
+    private boolean actualizandoLimites;
 
     /** Atributos solicitados: checkboxes reconstruidos al elegir la habitacion. */
     private final JPanel panelAtributos = new JPanel(new GridLayout(0, 2, 8, 4));
@@ -96,10 +106,22 @@ public final class DialogoReserva extends JDialog {
         cargarCombos();
         add(construirFormulario(), BorderLayout.CENTER);
         add(construirBotones(), BorderLayout.SOUTH);
+        for (JSpinner spinner : new JSpinner[]{spinnerParejas,
+                spinnerPersonasIndividuales, spinnerBebes}) {
+            spinner.addChangeListener(e -> {
+                if (actualizandoLimites) {
+                    return;
+                }
+                actualizarLimitesYavisos();
+                if (isShowing()) {
+                    pack();
+                }
+            });
+        }
         actualizarCamposNuevoTitular();
+        aplicarHabitacion((Habitacion) comboHabitacion.getSelectedItem());
         pack();
         setLocationRelativeTo(padre);
-        aplicarHabitacion((Habitacion) comboHabitacion.getSelectedItem());
     }
 
     /** Abre el dialogo en modo alta. */
@@ -181,6 +203,9 @@ public final class DialogoReserva extends JDialog {
         if (checkOut != null) {
             spinnerCheckOut.setValue(aFecha(checkOut));
         }
+        actualizarLimitesYavisos();
+        pack();
+        setLocationRelativeTo(getOwner());
     }
 
     /** Prellena todos los campos con la propuesta a editar. */
@@ -189,13 +214,19 @@ public final class DialogoReserva extends JDialog {
         seleccionarHabitacionPorId(ed.habitacionId());
         spinnerCheckIn.setValue(aFecha(ed.checkIn()));
         spinnerCheckOut.setValue(aFecha(ed.checkOut()));
-        spinnerMatrimoniales.setValue(ed.camasMatrimoniales());
-        spinnerIndividuales.setValue(ed.camasIndividuales());
-        spinnerCunas.setValue(ed.cunas());
+        reiniciarCantidad(spinnerParejas, MAX_CANTIDAD);
+        reiniciarCantidad(spinnerPersonasIndividuales, MAX_CANTIDAD);
+        reiniciarCantidad(spinnerBebes, Integer.MAX_VALUE);
+        spinnerParejas.setValue(ed.cantMatrimonios());
+        spinnerPersonasIndividuales.setValue(ed.cantPersonasIndividuales());
+        spinnerBebes.setValue(ed.cantBebes());
         comboEstado.setSelectedItem(ed.estado());
         checkLateCheckout.setSelected(ed.lateCheckout());
         marcarAtributos(ed.atributos());
         actualizarCamposNuevoTitular();
+        actualizarLimitesYavisos();
+        pack();
+        setLocationRelativeTo(getOwner());
     }
 
     // --------------------------------------------------------------- internals
@@ -255,37 +286,113 @@ public final class DialogoReserva extends JDialog {
         }
     }
 
-    /** Aplica los topes/defaults de camas y la lista de atributos de la habitacion. */
+    /**
+     * Aplica los defaults de personas de la habitacion (una pareja por cama
+     * matrimonial, una persona por cama individual, un bebe por cuna) y
+     * reconstruye sus atributos.
+     */
     private void aplicarHabitacion(Habitacion h) {
         if (h == null) {
             return;
         }
-        ajustarCantidad(spinnerMatrimoniales, h.getCantidadMatrimoniales());
-        ajustarCantidad(spinnerIndividuales, h.getCantidadIndividuales());
-        ajustarCantidad(spinnerCunas, h.getCantidadCunas());
+        reiniciarCantidad(spinnerParejas, MAX_CANTIDAD);
+        reiniciarCantidad(spinnerPersonasIndividuales, MAX_CANTIDAD);
+        reiniciarCantidad(spinnerBebes, Integer.MAX_VALUE);
+        spinnerParejas.setValue(h.getCantidadMatrimoniales());
+        spinnerPersonasIndividuales.setValue(h.getCantidadIndividuales());
+        spinnerBebes.setValue(h.getCantidadCunas());
         reconstruirAtributos(h.getAtributos());
+        actualizarLimitesYavisos();
     }
 
-    /** Resetea camas y atributos cuando no hay habitacion explicita (alta automatica). */
+    /** Resetea personas/atributos cuando no hay habitacion explicita (alta automatica). */
     private void limpiarHabitacion() {
-        reiniciarCantidad(spinnerMatrimoniales);
-        reiniciarCantidad(spinnerIndividuales);
-        reiniciarCantidad(spinnerCunas);
+        reiniciarCantidad(spinnerParejas, MAX_CANTIDAD);
+        reiniciarCantidad(spinnerPersonasIndividuales, MAX_CANTIDAD);
+        reiniciarCantidad(spinnerBebes, Integer.MAX_VALUE);
         reconstruirAtributos(Set.of());
+        limpiarAvisos();
     }
 
-    /** Restaura tope MAX_CANTIDAD y valor 0: sin habitacion no hay tope real. */
-    private static void reiniciarCantidad(JSpinner spinner) {
+    /** Restaura el tope indicado y valor 0: sin habitacion no hay tope real. */
+    private static void reiniciarCantidad(JSpinner spinner, int maximo) {
         SpinnerNumberModel modelo = (SpinnerNumberModel) spinner.getModel();
-        modelo.setMaximum(MAX_CANTIDAD);
+        modelo.setMaximum(maximo);
         modelo.setValue(0);
     }
 
-    /** Ajusta tope y valor del spinner: tope = max(0, n), valor = tope. */
-    private static void ajustarCantidad(JSpinner spinner, int maximo) {
-        SpinnerNumberModel modelo = (SpinnerNumberModel) spinner.getModel();
-        modelo.setMaximum(Math.max(0, maximo));
-        modelo.setValue(modelo.getMaximum());
+    /**
+     * Mantiene los topes de parejas/individuales dentro de la capacidad fisica
+     * de la habitacion (camas + colchones) y actualiza los avisos inline. Los
+     * bebes NO se topean: solo avisan cuando faltan cunas.
+     */
+    private void actualizarLimitesYavisos() {
+        if (actualizandoLimites) {
+            return;
+        }
+        actualizandoLimites = true;
+        try {
+            Habitacion h = habitacionSeleccionada();
+            if (h == null) {
+                limpiarAvisos();
+                return;
+            }
+            int capacidadPersonas = 2 * h.getCantidadMatrimoniales()
+                    + h.getCantidadIndividuales() + h.getColchones();
+
+            SpinnerNumberModel modeloParejas = (SpinnerNumberModel) spinnerParejas.getModel();
+            SpinnerNumberModel modeloIndividuales =
+                    (SpinnerNumberModel) spinnerPersonasIndividuales.getModel();
+
+            int individuales = cantidad(spinnerPersonasIndividuales);
+            int maxParejas = Math.max(0, (capacidadPersonas - individuales) / 2);
+            modeloParejas.setMaximum(Math.min(MAX_CANTIDAD, maxParejas));
+
+            int parejas = cantidad(spinnerParejas);
+            int maxIndividuales = Math.max(0, capacidadPersonas - 2 * parejas);
+            modeloIndividuales.setMaximum(Math.min(MAX_CANTIDAD, maxIndividuales));
+
+            SpinnerNumberModel modeloBebes = (SpinnerNumberModel) spinnerBebes.getModel();
+            modeloBebes.setMaximum(Integer.MAX_VALUE);
+
+            AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(h,
+                    cantidad(spinnerParejas), cantidad(spinnerPersonasIndividuales),
+                    cantidad(spinnerBebes), true);
+            avisoParejas.setText(htmlAviso(asignacion.avisoMatrimonios()));
+            avisoPersonasIndividuales.setText(htmlAviso(asignacion.avisoPersonasIndividuales()));
+            avisoBebes.setText(htmlAviso(asignacion.avisoBebes()));
+            avisoCapacidad.setText(htmlAviso(asignacion.avisoCapacidad()));
+        } finally {
+            actualizandoLimites = false;
+        }
+    }
+
+    private Habitacion habitacionSeleccionada() {
+        if (automatica) {
+            return null; // la habitacion la resuelve el controlador
+        }
+        return comboHabitacion.getSelectedItem() instanceof Habitacion h ? h : null;
+    }
+
+    private static JLabel avisoInline() {
+        JLabel aviso = new JLabel();
+        aviso.setFont(aviso.getFont().deriveFont(Font.PLAIN, 10f));
+        aviso.setForeground(new Color(0xB0, 0x5A, 0x00));
+        return aviso;
+    }
+
+    private static String htmlAviso(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return "";
+        }
+        return "<html><body style='width:270px'>" + texto + "</body></html>";
+    }
+
+    private void limpiarAvisos() {
+        avisoParejas.setText("");
+        avisoPersonasIndividuales.setText("");
+        avisoBebes.setText("");
+        avisoCapacidad.setText("");
     }
 
     /** Reconstruye los checkboxes de atributos (todos destildados por defecto). */
@@ -340,9 +447,13 @@ public final class DialogoReserva extends JDialog {
         agregarCampo(panel, fila++, "Habitación:", comboHabitacion);
         agregarCampo(panel, fila++, "Check-in:", spinnerCheckIn);
         agregarCampo(panel, fila++, "Check-out:", spinnerCheckOut);
-        agregarCampo(panel, fila++, "Camas matrimoniales:", spinnerMatrimoniales);
-        agregarCampo(panel, fila++, "Camas individuales:", spinnerIndividuales);
-        agregarCampo(panel, fila++, "Cunas:", spinnerCunas);
+        agregarCampo(panel, fila++, "Parejas / matrimonios:", spinnerParejas);
+        fila = agregarAviso(panel, fila, avisoParejas);
+        agregarCampo(panel, fila++, "Personas individuales:", spinnerPersonasIndividuales);
+        fila = agregarAviso(panel, fila, avisoPersonasIndividuales);
+        agregarCampo(panel, fila++, "Bebés:", spinnerBebes);
+        fila = agregarAviso(panel, fila, avisoBebes);
+        fila = agregarAviso(panel, fila, avisoCapacidad);
         agregarCampo(panel, fila++, "Estado:", comboEstado);
         agregarCampo(panel, fila++, "Late check-out:", checkLateCheckout);
 
@@ -375,13 +486,13 @@ public final class DialogoReserva extends JDialog {
     private void aceptar() {
         try {
             TitularReserva titular = resolverTitular();
-            int matrimoniales = cantidad(spinnerMatrimoniales);
-            int individuales = cantidad(spinnerIndividuales);
-            int cunas = cantidad(spinnerCunas);
+            int parejas = cantidad(spinnerParejas);
+            int personasIndividuales = cantidad(spinnerPersonasIndividuales);
+            int bebes = cantidad(spinnerBebes);
             if (automatica) {
-                reservaCreada = controladorReservas.crearReservaAutomatica(titular,
+                reservaCreada = controladorReservas.crearReservaAutomaticaPersonas(titular,
                         fecha(spinnerCheckIn), fecha(spinnerCheckOut),
-                        matrimoniales, individuales, 0, cunas, atributosSeleccionados());
+                        parejas, personasIndividuales, bebes, atributosSeleccionados());
                 aplicarLateCheckout(reservaCreada, false);
             } else {
                 Habitacion habitacion = (Habitacion) comboHabitacion.getSelectedItem();
@@ -389,17 +500,26 @@ public final class DialogoReserva extends JDialog {
                     mostrarError("Seleccioná una habitación.");
                     return;
                 }
+                AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(habitacion,
+                        parejas, personasIndividuales, bebes, true);
+                if (!asignacion.capacidadSuficiente()) {
+                    avisoCapacidad.setText(htmlAviso(asignacion.avisoCapacidad()));
+                    pack();
+                    return; // aviso inline, sin popup
+                }
                 if (edicion != null) {
-                    reservaCreada = controladorReservas.actualizarReserva(edicion.reservaId(),
-                            edicion.habitacionId(), edicion.nocheObjetivo(), titular, habitacion.getId(),
+                    reservaCreada = controladorReservas.actualizarReservaPersonas(
+                            edicion.reservaId(), edicion.habitacionId(), edicion.nocheObjetivo(),
+                            titular, habitacion.getId(),
                             fecha(spinnerCheckIn), fecha(spinnerCheckOut),
-                            matrimoniales, individuales, cunas,
+                            parejas, personasIndividuales, bebes,
                             (EstadoReserva) comboEstado.getSelectedItem(), atributosSeleccionados());
                     aplicarLateCheckout(reservaCreada, true);
                 } else {
-                    reservaCreada = controladorReservas.crearReservaPara(titular, habitacion.getId(),
+                    reservaCreada = controladorReservas.crearReservaParaPersonas(
+                            titular, habitacion.getId(),
                             fecha(spinnerCheckIn), fecha(spinnerCheckOut),
-                            matrimoniales, individuales, cunas, atributosSeleccionados());
+                            parejas, personasIndividuales, bebes, atributosSeleccionados());
                     aplicarLateCheckout(reservaCreada, false);
                 }
             }
@@ -414,6 +534,10 @@ public final class DialogoReserva extends JDialog {
      * Aplica el flag de late check-out a la reserva recien creada o editada.
      * En edicion se persiste siempre el valor del checkbox (permite destildar);
      * en alta solo cuando esta marcado (el default ya es false).
+     *
+     * <p>Si el controlador rechaza el marcado (otra reserva hace check-in el
+     * mismo dia en la habitacion), se avisa y se destilda el checkbox: la
+     * reserva ya guardada NO se revierte, solo se corrige el flag.
      */
     private void aplicarLateCheckout(Reserva reserva, boolean siempre) {
         if (reserva == null || reserva.getId() == null) {
@@ -421,7 +545,12 @@ public final class DialogoReserva extends JDialog {
         }
         boolean deseado = checkLateCheckout.isSelected();
         if (siempre || deseado) {
-            controladorReservas.marcarLateCheckout(reserva.getId(), deseado);
+            try {
+                controladorReservas.marcarLateCheckout(reserva.getId(), deseado);
+            } catch (IllegalStateException ex) {
+                checkLateCheckout.setSelected(false);
+                mostrarError(ex.getMessage());
+            }
         }
     }
 
@@ -478,7 +607,7 @@ public final class DialogoReserva extends JDialog {
     }
 
     private void mostrarError(String mensaje) {
-        JOptionPane.showMessageDialog(this, mensaje, "No se pudo guardar", JOptionPane.ERROR_MESSAGE);
+        DialogoError.mostrar(this, "No se pudo guardar", mensaje);
     }
 
     private static String nombreTitular(TitularReserva t) {
@@ -502,6 +631,10 @@ public final class DialogoReserva extends JDialog {
 
     private static JSpinner spinnerCantidad() {
         return new JSpinner(new SpinnerNumberModel(0, 0, MAX_CANTIDAD, 1));
+    }
+
+    private static JSpinner spinnerBebes() {
+        return new JSpinner(new SpinnerNumberModel(0, 0, Integer.MAX_VALUE, 1));
     }
 
     private static JSpinner spinnerFecha(LocalDate inicial) {
@@ -534,5 +667,19 @@ public final class DialogoReserva extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
         panel.add(campo, gbc);
+    }
+
+    /** Agrega una fila de aviso inline debajo del campo correspondiente. */
+    private static int agregarAviso(JPanel panel, int fila, JLabel aviso) {
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        gbc.gridx = 0;
+        gbc.gridy = fila;
+        gbc.gridwidth = 2;
+        gbc.insets = new Insets(0, 6, 3, 6);
+        panel.add(aviso, gbc);
+        return fila + 1;
     }
 }

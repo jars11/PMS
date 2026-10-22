@@ -10,6 +10,7 @@ import com.pms.utils.TipoMoneda;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -47,6 +48,28 @@ public class ManejadorBusquedaHuecos {
 
     /** Una alternativa completa junto con la penalidad de cada propuesta (alineada con las solicitudes). */
     private record Alternativa(Set<RHPropuesta> conjunto, List<List<Integer>> penalidades) {
+
+        /** Costo total de la alternativa: suma de subtotales de sus propuestas. */
+        double totalSubtotal() {
+            double total = 0.0;
+            for (RHPropuesta p : conjunto) {
+                total += p.getSubtotal();
+            }
+            return total;
+        }
+
+        /** Clave deterministica por numeros de habitacion, para desempatar. */
+        String claveHabitaciones() {
+            List<String> numeros = new ArrayList<>();
+            for (RHPropuesta p : conjunto) {
+                String numero = p.getHabitacion() == null
+                        || p.getHabitacion().getNumero() == null
+                        ? "?" : String.format("%04d", p.getHabitacion().getNumero());
+                numeros.add(numero);
+            }
+            numeros.sort(String::compareTo);
+            return String.join(",", numeros);
+        }
     }
 
     // =========================================================================
@@ -54,11 +77,11 @@ public class ManejadorBusquedaHuecos {
     // =========================================================================
 
     /** Sobrecarga con los valores por defecto del pseudocódigo. */
-    public Set<Set<RHPropuesta>> buscarHuecos(Set<DTRHSolicitada> solicitudes, InteraccionUsuario interaccion) {
+    public Set<Set<RHPropuesta>> buscarHuecos(Collection<DTRHSolicitada> solicitudes, InteraccionUsuario interaccion) {
         return buscarHuecos(solicitudes, interaccion, false, 0, false, false, DIAS_VENTANA_POR_DEFECTO);
     }
 
-    public Set<Set<RHPropuesta>> buscarHuecos(Set<DTRHSolicitada> solicitudes,
+    public Set<Set<RHPropuesta>> buscarHuecos(Collection<DTRHSolicitada> solicitudes,
                                               InteraccionUsuario interaccion,
                                               boolean permitirColchonesExtra,
                                               int relajacionDistribucion,
@@ -134,8 +157,13 @@ public class ManejadorBusquedaHuecos {
             if (!alcanza(sols, porCamas, libres)) {
                 final boolean extra = permitirColchonesExtra;
                 final boolean attr = atributosRelajados;
+                // Un solo cartel: el aviso y la pregunta en la misma ventana.
                 return ofrecerRelajacion(interaccion,
-                        "¿Buscar habitaciones con la capacidad pedida pero otra distribución de camas?",
+                        "No se encontró habitación",
+                        "No se encontró habitación para la fecha solicitada con la "
+                                + "distribución de camas pedida.\n\n"
+                                + "¿Buscar habitaciones con la capacidad pedida pero otra "
+                                + "distribución de camas?",
                         () -> buscarHuecos(solicitudes, interaccion, extra, 1, attr, false, diasVentana),
                         solicitudes, permitirColchonesExtra, relajacionDistribucion, atributosRelajados, diasVentana);
             }
@@ -185,7 +213,7 @@ public class ManejadorBusquedaHuecos {
             Criterio criterioBuild = criterioArmado(permitirColchonesExtra, relajacionDistribucion, atributosRelajados, maximalesPorSolicitud);
             List<List<Habitacion>> asignaciones = new ArrayList<>();
             asignarTodas(sols, 0, criterioBuild, libres, new HashMap<>(), new ArrayList<>(), asignaciones);
-            return materializar(sols, asignaciones, permitirColchonesExtra, relajacionDistribucion, interaccion);
+            return materializar(sols, asignaciones, permitirColchonesExtra, relajacionDistribucion);
         }
         return nivel2(sols, libres, permitirColchonesExtra, atributosRelajados, interaccion);
     }
@@ -197,19 +225,37 @@ public class ManejadorBusquedaHuecos {
     private Set<Set<RHPropuesta>> ofrecerRelajacion(InteraccionUsuario interaccion,
                                                     String pregunta,
                                                     java.util.function.Supplier<Set<Set<RHPropuesta>>> relajada,
-                                                    Set<DTRHSolicitada> solicitudes,
+                                                    Collection<DTRHSolicitada> solicitudes,
                                                     boolean permitirColchonesExtra,
                                                     int relajacionDistribucion,
                                                     boolean atributosRelajados,
                                                     int diasVentana) {
-        if (interaccion.confirmar(pregunta)) {
+        return ofrecerRelajacion(interaccion, null, pregunta, relajada, solicitudes,
+                permitirColchonesExtra, relajacionDistribucion, atributosRelajados,
+                diasVentana);
+    }
+
+    private Set<Set<RHPropuesta>> ofrecerRelajacion(InteraccionUsuario interaccion,
+                                                    String titulo,
+                                                    String pregunta,
+                                                    java.util.function.Supplier<Set<Set<RHPropuesta>>> relajada,
+                                                    Collection<DTRHSolicitada> solicitudes,
+                                                    boolean permitirColchonesExtra,
+                                                    int relajacionDistribucion,
+                                                    boolean atributosRelajados,
+                                                    int diasVentana) {
+        boolean acepta = titulo == null
+                ? interaccion.confirmar(pregunta)
+                : interaccion.confirmar(titulo, pregunta);
+        if (acepta) {
             return relajada.get();
         }
-        return ofrecerOtrasFechas(interaccion, solicitudes, permitirColchonesExtra, relajacionDistribucion, atributosRelajados, diasVentana);
+        return ofrecerOtrasFechas(interaccion, solicitudes, permitirColchonesExtra,
+                relajacionDistribucion, atributosRelajados, diasVentana);
     }
 
     private Set<Set<RHPropuesta>> ofrecerOtrasFechas(InteraccionUsuario interaccion,
-                                                     Set<DTRHSolicitada> solicitudes,
+                                                     Collection<DTRHSolicitada> solicitudes,
                                                      boolean permitirColchonesExtra,
                                                      int relajacionDistribucion,
                                                      boolean atributosRelajados,
@@ -263,7 +309,9 @@ public class ManejadorBusquedaHuecos {
                     if (hasta.equals(finVentana)) {
                         hasta = extenderAdelante(h, hasta);
                     }
-                    RHPropuesta propuesta = propuestaRango(h, desde, hasta, permitirColchonesExtra);
+                    RHPropuesta propuesta = propuestaRango(h, desde, hasta, permitirColchonesExtra,
+                            tipo.getCantMatrimonios(), tipo.getCantIndividuales(),
+                            tipo.getCantBebes(), tipo.getCantCunas());
                     grupo.add(propuesta);
                 }
             }
@@ -344,8 +392,7 @@ public class ManejadorBusquedaHuecos {
     private Set<Set<RHPropuesta>> materializar(List<DTRHSolicitada> sols,
                                                List<List<Habitacion>> asignaciones,
                                                boolean permitirColchonesExtra,
-                                               int relajacionDistribucion,
-                                               InteraccionUsuario interaccion) {
+                                               int relajacionDistribucion) {
         // Deduplicar por (configuración, fechas) y quedarse con la primera
         Map<String, Alternativa> unicas = new LinkedHashMap<>();
         for (List<Habitacion> asig : asignaciones) {
@@ -357,58 +404,27 @@ public class ManejadorBusquedaHuecos {
                 Habitacion h = asig.get(i);
                 conjunto.add(propuesta(s, h, permitirColchonesExtra));
                 penalidades.add(penalidad(s, h, permitirColchonesExtra, relajacionDistribucion, s.getAtributosHabitacion()));
-                clave.append(configuracionDe(h)).append('@').append(s.getFechaInicio()).append("..").append(s.getFechaFin()).append(';');
+                clave.append(h.getNumero()).append(':')
+                        .append(configuracionDe(h)).append('@')
+                        .append(s.getFechaInicio()).append("..").append(s.getFechaFin()).append(';');
             }
             unicas.putIfAbsent(clave.toString(), new Alternativa(conjunto, penalidades));
         }
 
-        List<Alternativa> alternativas = new ArrayList<>(unicas.values());
-        // Quitar dominadas: A domina a B si cada penalidad de A es <= que la par en B y alguna es menor
-        List<Alternativa> noDominadas = new ArrayList<>();
-        for (Alternativa a : alternativas) {
-            boolean dominada = alternativas.stream().anyMatch(b -> b != a && domina(b, a));
-            if (!dominada) {
-                noDominadas.add(a);
-            }
-        }
-        noDominadas.sort(Comparator.comparingInt(a -> sumaPenalidad(a.penalidades())));
-
-        // Notificar capacidad sobrante (sección 2)
-        boolean sobrante = false;
-        for (Alternativa a : noDominadas) {
-            for (List<Integer> p : a.penalidades()) {
-                if (p.get(3) > 0) {
-                    sobrante = true;
-                    break;
-                }
-            }
-        }
-        if (sobrante) {
-            interaccion.notificar("Alguna habitación es más grande que lo pedido (más cara).");
-        }
+        // El precio manda SIEMPRE: se elige la alternativa de menor suma de
+        // subtotales, aunque tenga capacidad/atributos de sobra. Las penalidades
+        // y los numeros de habitacion solo desempatan de forma deterministica.
+        Comparator<Alternativa> porCosto = Comparator
+                .comparingDouble(Alternativa::totalSubtotal)
+                .thenComparingInt(a -> sumaPenalidad(a.penalidades()))
+                .thenComparing(Alternativa::claveHabitaciones);
+        Alternativa elegida = unicas.values().stream().min(porCosto).orElse(null);
 
         Set<Set<RHPropuesta>> resultado = new LinkedHashSet<>();
-        for (Alternativa a : noDominadas) {
-            resultado.add(a.conjunto());
+        if (elegida != null) {
+            resultado.add(elegida.conjunto());
         }
         return resultado;
-    }
-
-    private boolean domina(Alternativa b, Alternativa a) {
-        if (b.penalidades().size() != a.penalidades().size()) {
-            return false;
-        }
-        boolean algunaMenor = false;
-        for (int i = 0; i < a.penalidades().size(); i++) {
-            int cmp = compararTuplas(b.penalidades().get(i), a.penalidades().get(i));
-            if (cmp > 0) {
-                return false;
-            }
-            if (cmp < 0) {
-                algunaMenor = true;
-            }
-        }
-        return algunaMenor;
     }
 
     private int sumaPenalidad(List<List<Integer>> penalidades) {
@@ -829,17 +845,6 @@ public class ManejadorBusquedaHuecos {
         return List.of(relajacionDistribucion, faltantes, colchones, sobrante, 1);
     }
 
-    private static int compararTuplas(List<Integer> a, List<Integer> b) {
-        int n = Math.min(a.size(), b.size());
-        for (int i = 0; i < n; i++) {
-            int c = Integer.compare(a.get(i), b.get(i));
-            if (c != 0) {
-                return c;
-            }
-        }
-        return Integer.compare(a.size(), b.size());
-    }
-
     // =========================================================================
     // Propuestas
     // =========================================================================
@@ -847,19 +852,41 @@ public class ManejadorBusquedaHuecos {
     private RHPropuesta propuesta(DTRHSolicitada s, Habitacion h, boolean permitirColchonesExtra) {
         long noches = Fechas.diasEntre(s.getFechaInicio(), s.getFechaFin());
         float subtotal = h.getTarifaPorNoche() * noches;
-        int individuales = h.getCantidadIndividuales() + colchonesUsados(s, h, permitirColchonesExtra);
+        AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(h,
+                s.getCantMatrimonios(), s.getCantIndividuales(), s.getCantBebes(),
+                s.getCantCunas(), permitirColchonesExtra);
         RHPropuesta rp = new RHPropuesta(s.getFechaInicio(), s.getFechaFin(), new TreeSet<>(h.getAtributos()),
-                subtotal, TipoMoneda.USD, h.getCantidadMatrimoniales(), individuales, h.getCantidadCunas());
+                subtotal, TipoMoneda.USD, asignacion.camasMatrimoniales(),
+                asignacion.camasIndividuales(), asignacion.cunas(),
+                s.getCantMatrimonios(), s.getCantIndividuales(), s.getCantBebes());
         rp.setHabitacion(h);
         return rp;
     }
 
     private RHPropuesta propuestaRango(Habitacion h, LocalDate desde, LocalDate hasta, boolean permitirColchonesExtra) {
+        return propuestaRango(h, desde, hasta, permitirColchonesExtra, 0, 0, 0, 0);
+    }
+
+    private RHPropuesta propuestaRango(Habitacion h, LocalDate desde, LocalDate hasta,
+                                       boolean permitirColchonesExtra, int parejas,
+                                       int personasIndividuales, int bebes, int cunasPedidas) {
         long noches = Math.max(1, Fechas.diasEntre(desde, hasta));
         float subtotal = h.getTarifaPorNoche() * noches;
-        int individuales = h.getCantidadIndividuales() + (permitirColchonesExtra ? h.getColchones() : 0);
+        if (parejas == 0 && personasIndividuales == 0 && bebes == 0) {
+            // Nivel 2 sin desglose por persona: se mantiene el comportamiento
+            // historico de usar todas las camas del cuarto.
+            RHPropuesta rp = new RHPropuesta(desde, hasta, new TreeSet<>(h.getAtributos()),
+                    subtotal, TipoMoneda.USD, h.getCantidadMatrimoniales(),
+                    h.getCantidadIndividuales(), h.getCantidadCunas());
+            rp.setHabitacion(h);
+            return rp;
+        }
+        AsignacionCamas.Asignacion asignacion = AsignacionCamas.calcular(h,
+                parejas, personasIndividuales, bebes, cunasPedidas, permitirColchonesExtra);
         RHPropuesta rp = new RHPropuesta(desde, hasta, new TreeSet<>(h.getAtributos()),
-                subtotal, TipoMoneda.USD, h.getCantidadMatrimoniales(), individuales, h.getCantidadCunas());
+                subtotal, TipoMoneda.USD, asignacion.camasMatrimoniales(),
+                asignacion.camasIndividuales(), asignacion.cunas(),
+                parejas, personasIndividuales, bebes);
         rp.setHabitacion(h);
         return rp;
     }

@@ -136,7 +136,7 @@ public final class AdminFrame extends JFrame {
     }
 
     private void mostrarError(RuntimeException ex) {
-        JOptionPane.showMessageDialog(this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        DialogoError.mostrar(this, "Error", ex.getMessage());
     }
 
     /** Modelo de tabla de habitaciones alimentado por el controlador. */

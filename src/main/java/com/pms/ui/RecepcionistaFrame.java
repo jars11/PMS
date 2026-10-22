@@ -12,10 +12,12 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -26,8 +28,9 @@ import java.awt.event.MouseEvent;
  * {@code listarReservas()}, una accion "Nueva reserva" que abre
  * {@link DialogoReserva}, una accion "Colocar reserva automática" que abre el
  * dialogo en modo automatico (la habitacion la resuelve el sistema), la pestana
- * del calendario nocturno ({@link CalendarioPanel}) y la pestana del asistente de
- * propuesta de estadía ({@link PanelPropuestaEstadia}).
+ * del calendario nocturno ({@link CalendarioPanel}) con el asistente de propuesta
+ * de estadía ({@link PanelPropuestaEstadia}) debajo, en un split vertical
+ * redimensionable.
  *
  * <p>El click derecho sobre una fila de la lista abre {@link DialogoReserva} en
  * modo edicion cuando la reserva tiene UNA sola propuesta (D1); si abarca varias
@@ -48,14 +51,35 @@ public final class RecepcionistaFrame extends JFrame {
         setLayout(new BorderLayout(8, 8));
 
         JTabbedPane pestanas = new JTabbedPane();
+        // El calendario es la pestana principal de recepcion: queda primero y
+        // seleccionada al abrir la pantalla.
+        pestanas.addTab("Calendario", construirPanelCalendario());
         pestanas.addTab("Reservas", construirPanelReservas());
-        pestanas.addTab("Calendario", calendario);
-        pestanas.addTab("Propuesta de estadía", new PanelPropuestaEstadia(this::refrescar));
         add(pestanas, BorderLayout.CENTER);
 
-        setSize(980, 560);
+        setSize(1120, 780);
         setLocationRelativeTo(null);
         refrescar();
+    }
+
+    /**
+     * Calendario y asistente de propuesta comparten pestana: el asistente queda
+     * debajo, en un split vertical que el usuario puede agrandar o achicar con
+     * la barra limite. Las propuestas elegidas se previsualizan en gris sobre el
+     * calendario antes de confirmarlas.
+     */
+    private JSplitPane construirPanelCalendario() {
+        PanelPropuestaEstadia propuesta =
+                new PanelPropuestaEstadia(this::refrescar, calendario::previsualizarPropuestas);
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, calendario, propuesta);
+        split.setResizeWeight(0.55);
+        split.setContinuousLayout(true);
+        split.setOneTouchExpandable(true);
+        split.setBorder(null);
+        split.setDividerLocation(400);
+        calendario.setMinimumSize(new Dimension(0, 180));
+        propuesta.setMinimumSize(new Dimension(0, 220));
+        return split;
     }
 
     private JPanel construirPanelReservas() {
@@ -160,7 +184,7 @@ public final class RecepcionistaFrame extends JFrame {
     }
 
     private void aviso(String mensaje) {
-        JOptionPane.showMessageDialog(this, mensaje, "Aviso", JOptionPane.INFORMATION_MESSAGE);
+        DialogoError.mostrar(this, "Aviso", mensaje);
     }
 
     private void refrescar() {

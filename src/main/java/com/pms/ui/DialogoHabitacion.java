@@ -230,7 +230,7 @@ public final class DialogoHabitacion extends JDialog {
     }
 
     private void mostrarError(String mensaje) {
-        JOptionPane.showMessageDialog(this, mensaje, "Datos inválidos", JOptionPane.ERROR_MESSAGE);
+        DialogoError.mostrar(this, "Datos inválidos", mensaje);
     }
 
     private static void agregarCampo(JPanel panel, int fila, String etiqueta, java.awt.Component campo) {

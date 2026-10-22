@@ -55,7 +55,9 @@ public class ManejadorAtributosHabs {
      * attributes wins; tie-break by fewer total attributes, then room number.
      */
     public Habitacion brindarHabitacionesDisponibles(DTRHSolicitada dtrhs) {
-        int passengers = 2 * dtrhs.getCantMatrimonios() + dtrhs.getCantIndividuales() + dtrhs.getCantBebes();
+        // Los bebes no consumen camas: las cunas son un recurso aparte y pueden
+        // ser menos que los bebes (duermen con los padres).
+        int passengers = 2 * dtrhs.getCantMatrimonios() + dtrhs.getCantIndividuales();
         Set<AtributoHabitacion> requeridos = dtrhs.getAtributosHabitacion();
 
         ControladorHabitaciones ch = ControladorHabitaciones.getInstance();
