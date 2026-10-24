@@ -24,7 +24,7 @@ import com.pms.handlers.ManejadorDistribucionHabs;
 import com.pms.persistence.JpaUtil;
 import com.pms.persistence.RepositorioRHPropuestas;
 import com.pms.persistence.RepositorioReservas;
-import com.pms.ui.CompatibilidadMovimiento;
+import com.pms.handlers.CompatibilidadMovimiento;
 import com.pms.utils.AtributoHabitacion;
 import com.pms.utils.EstadoReserva;
 import com.pms.utils.MotivoRechazo;
