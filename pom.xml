@@ -4,20 +4,36 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
     <groupId>com.pms</groupId>
     <artifactId>pms</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>pms</name>
-    <description>Hotel PMS - Java 21 + Maven + JPA (Hibernate) + H2 port of the C++ design.</description>
+    <description>Hotel PMS - Java 21 + Spring Boot (REST) + JPA (Hibernate) + H2 port of the C++ design.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>21</maven.compiler.release>
+        <java.version>21</java.version>
     </properties>
 
     <dependencies>
+        <!-- REST layer: Spring Boot web (embedded Tomcat). JPA/H2 stays managed
+             by the existing JpaUtil + persistence.xml, untouched, so the
+             business logic (controllers/handlers/repositories) is reused as-is. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
         <!-- JPA provider: Hibernate ORM 6.4 -->
         <dependency>
             <groupId>org.hibernate.orm</groupId>
@@ -37,13 +53,18 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-launcher</artifactId>
-            <version>1.10.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- REST integration tests (MockMvc + TestRestTemplate) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -53,7 +74,6 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
                 <configuration>
                     <release>21</release>
                 </configuration>
@@ -61,15 +81,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
             </plugin>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.2.0</version>
-                <configuration>
-                    <mainClass>com.pms.ui.PmsApp</mainClass>
-                </configuration>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>
