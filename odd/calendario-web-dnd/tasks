@@ -1,4 +1,4 @@
-T1 backend rest ocupacion mover redimensionar [pending]
-T2 frontend calendario grilla barras drag crear [pending]
-T3 frontend mover redimensionar flechas [pending]
-T4 verificacion end-to-end [pending]
+T1 backend rest ocupacion mover redimensionar [done] 83f20d2
+T2 frontend calendario grilla barras drag crear [done] a8e9874
+T3 frontend mover redimensionar flechas [done] a8e9874
+T4 verificacion end-to-end [done]

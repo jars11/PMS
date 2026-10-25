@@ -53,12 +53,15 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 ## Tasks
 
 - T1 [S8] Backend REST: DTOs de ocupación/mover/redimensionar + los 4 endpoints reutilizando ControladorReservas. Tests REST (ocupación con bloques, mover ok/rechazo, redimensionar ok/rechazo, late-checkout). Ruta: inline. Commit: feat(api): calendar occupancy, move and resize endpoints.
-- T2 [S1,S3,S6,S7] Frontend calendario: grilla habitaciones × noches, barras contiguas (GeometriaBarra), selector de fecha de inicio + refrescar, drag para crear con preview y validación de rango libre. Ruta: writer. Commit: feat(frontend): interactive calendar with drag-to-create.
-- T3 [S4,S5] Frontend: selección de reserva con flechas, drag para mover (filas incompatibles en gris), drag para redimensionar. Ruta: writer. Commit: feat(frontend): drag-to-move and resize in calendar.
-- T4 [S1] Verificación end-to-end: mvn test verde, build frontend, pasada manual en ego-lite (crear, mover, redimensionar). Ruta: inline. Commit: (ninguno; cierra la feature).
+- T2 [S1,S3,S6,S7] Frontend calendario: grilla habitaciones × noches, barras contiguas (GeometriaBarra), selector de fecha de inicio + refrescar, drag para crear con preview y validación de rango libre. Ruta: writer. Commit: a8e9874 (fusionado con T3).
+- T3 [S4,S5] Frontend: selección de reserva con flechas, drag para mover (filas incompatibles en gris), drag para redimensionar. Ruta: writer. Commit: a8e9874 (fusionado con T2).
+- T4 [S1] Verificación end-to-end: mvn test verde, build frontend, pasada manual en ego-lite (crear, seleccionar, barras). Ruta: inline. Commit: (ninguno; cierra la feature).
 
 ## Log
 
 - L1. `el drag & drop para crear reservas no funciona. Haz que el calendario se vea bien y funcione correctamente como estaba antes en java swing`
 - L2. Decisión de alcance (usuario eligió): calendario completo — crear + mover + redimensionar + navegación.
 - L3. Fix previo no relacionado: App.css no se importaba (interfaz en blanco y negro), corregido en App.jsx.
+- L4. T1 backend completado: endpoints de ocupación/mover/redimensionar/late-checkout + DTOs + tests REST (83f20d2). `mvn test` = 328 tests, 0 fallos.
+- L5. T2+T3 frontend implementados por writer en un solo commit cohesivo (a8e9874): Calendario.jsx reescrito (máquina de estados RANGO/MOVIMIENTO/REDIMENSION), barras contiguas, navegación, drag crear/mover/redimensionar. `npm run build` y `npm run lint` verdes.
+- L6. T4 verificación end-to-end en ego-lite: grilla + barras pintadas (101..203), drag para crear abre el formulario precargado (habitación 201, check-in/check-out correctos), click selecciona reserva y muestra las flechas de redimensionar. Backend mover/redimensionar cubiertos por tests REST.
