@@ -645,6 +645,48 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     return () => ro.disconnect();
   }, []);
 
+  // ------------------------------------------- navegacion con Shift + rueda
+  // Replica CalendarioPanel (Swing): rueda arriba = dia anterior, rueda abajo =
+  // dia siguiente. Sin Shift la rueda conserva el scroll normal del calendario.
+  const fechaInicioRef = useRef(fechaInicio);
+  useEffect(() => {
+    fechaInicioRef.current = fechaInicio;
+  }, [fechaInicio]);
+
+  /** Mueve la fecha de inicio y recarga, igual que aplicarFecha. */
+  function moverDias(paso) {
+    const iso = sumarDias(fechaInicioRef.current, paso);
+    // La ref se actualiza al instante, asi dos giros seguidos antes de que
+    // React vuelva a renderizar no se pisan.
+    fechaInicioRef.current = iso;
+    setFechaInput(formatearDMA(iso));
+    setFechaInicio(iso);
+  }
+
+  function manejarRueda(e) {
+    if (!e.shiftKey) return;
+    // Con Shift los navegadores suelen mandar el giro en deltaX.
+    const giro = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+    if (giro === 0) return;
+    e.preventDefault();
+    moverDias(giro < 0 ? -1 : 1);
+  }
+
+  const ruedaRef = useRef(null);
+  useEffect(() => {
+    ruedaRef.current = manejarRueda;
+  });
+  // React registra `wheel` como listener pasivo en la raiz, asi que
+  // preventDefault dentro de onWheel no frena el scroll: se engancha a mano
+  // sobre el contenedor con passive: false.
+  useEffect(() => {
+    const el = contRef.current;
+    if (!el) return undefined;
+    const rueda = (e) => ruedaRef.current(e);
+    el.addEventListener('wheel', rueda, { passive: false });
+    return () => el.removeEventListener('wheel', rueda);
+  }, []);
+
   function iniciarRedimension(handle, e, est) {
     const borde = handle.dataset.borde;
     const direccion = handle.dataset.direccion;
