@@ -164,9 +164,10 @@ function esElBloqueSeleccionado(est, bloque, fila) {
   );
 }
 
-function resolverDestino(filaHover, filaOrigen, filas, compatiblePorFila) {
+function resolverDestino(filaHover, filaOrigen, filas, compatiblePorFila, filaValida) {
   if (filaHover < 0 || filaHover >= filas) return -1;
   if (filaHover === filaOrigen) return filaHover;
+  if (filaValida && !filaValida(filaHover)) return -1;
   if (!compatiblePorFila[filaHover]) return -1;
   return filaHover;
 }
@@ -370,6 +371,22 @@ function seleccionarReserva(est, fila, bloque) {
   est.bloqueSeleccionado = bloque;
 }
 
+/**
+ * Re-selects the reservation after a reload so the resize arrows survive a
+ * successful move/resize (graceful continuation instead of silent capability loss).
+ */
+function reSeleccionarPorReserva(est, m, reservaId) {
+  const encontrados = [];
+  for (let fila = 0; fila < m.filas.length; fila++) {
+    for (const bloque of m.bloquesDeFila(fila)) {
+      if (bloque.reservaId === reservaId) encontrados.push({ fila, bloque });
+    }
+  }
+  if (encontrados.length === 1) {
+    seleccionarReserva(est, encontrados[0].fila, encontrados[0].bloque);
+  }
+}
+
 function celdaInfo(m, est, fila, col, fecha) {
   const enMovimiento = est.tipo === 'movimiento';
   const enRedimension = est.tipo === 'redimension';
@@ -444,6 +461,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
   const [, setTick] = useState(0);
   const estadoRef = useRef(nuevoEstado());
   const modeloRef = useRef(null);
+  const enVueloRef = useRef(false);
   const render = useCallback(() => setTick((t) => t + 1), []);
 
   const noches = containerWidth > 0 ? nochesVisibles(containerWidth) : NOCHES_POR_DEFECTO;
@@ -453,12 +471,15 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
     const hasta = sumarDias(fechaInicio, noches);
     setCargando(true);
     setErrorCarga('');
+    const selPrevia = estadoRef.current;
+    const reservaSelId = selPrevia.haySeleccion ? selPrevia.reservaSeleccionadaId : null;
     try {
       const data = await api.calendario(desde, hasta);
       const m = construirModelo(data, habitaciones, desde, noches);
       modeloRef.current = m;
       setModelo(m);
       estadoRef.current = nuevoEstado();
+      if (reservaSelId != null) reSeleccionarPorReserva(estadoRef.current, m, reservaSelId);
       render();
     } catch (err) {
       setErrorCarga(err.message);
@@ -625,6 +646,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
   }
 
   async function finalizarMovimiento(m, est) {
+    if (enVueloRef.current) return;
     const filaOrigen = est.filaOrigen;
     const filaDestino = est.filaDestino;
     const reservaId = est.reservaOrigenId;
@@ -636,6 +658,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
     if (filaDestino < 0 || filaDestino === filaOrigen) return;
     const destino = m.habitacionDeFila(filaDestino);
     if (!destino || destino.id == null) return;
+    enVueloRef.current = true;
     try {
       await api.moverReserva(reservaId, {
         habitacionOrigenId: origen,
@@ -652,10 +675,14 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
         motivo: err.motivo,
         detalle: err.detalle,
       });
+      await recargarRef.current();
+    } finally {
+      enVueloRef.current = false;
     }
   }
 
   async function finalizarRedimension(m, est) {
+    if (enVueloRef.current) return;
     const original = est.bloqueSeleccionado;
     const nuevoInicio = est.inicioRedimension;
     const nuevoFin = est.finRedimension;
@@ -680,6 +707,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
       (nuevoInicio !== original.checkIn || nuevoFin !== original.checkOut);
     if (!cambio || reservaId == null || !hab || hab.id == null || !noche) return;
 
+    enVueloRef.current = true;
     try {
       await api.redimensionarReserva(reservaId, {
         habitacionId: hab.id,
@@ -692,6 +720,8 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
     } catch (err) {
       setAviso({ tipo: 'error', titulo: 'Error', mensaje: err.message });
       await recargarRef.current();
+    } finally {
+      enVueloRef.current = false;
     }
   }
 
@@ -768,7 +798,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
     }
     if (est.tipo === 'movimiento') {
       est.filaHover = filaDeEvento(e);
-      est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila);
+      est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila, (fila) => !!m.habitacionDeFila(fila));
       render();
       return;
     }
@@ -783,7 +813,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
       est.bloquePresion = null;
       iniciarMovimiento(est, m, fila, columna, bloque);
       est.filaHover = filaDeEvento(e);
-      est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila);
+      est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila, (fila) => !!m.habitacionDeFila(fila));
       render();
       return;
     }
