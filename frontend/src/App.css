@@ -553,6 +553,21 @@ label {
   flex: 1;
 }
 
+/* Checkbox en linea (p. ej. "Late check-out"), a diferencia de los campos
+   apilados del resto del formulario. */
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto);
+  font-size: 0.9rem;
+}
+
+label.check input {
+  width: auto;
+  margin: 0;
+}
+
 .acciones {
   display: flex;
   justify-content: flex-end;

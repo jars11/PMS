@@ -10,6 +10,7 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
     camasMatrimoniales: reserva?.camasMatrimoniales ?? 1,
     camasIndividuales: reserva?.camasIndividuales ?? 0,
     cunas: reserva?.cunas ?? 0,
+    lateCheckout: reserva?.lateCheckout ?? false,
   });
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -33,6 +34,7 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
           camasMatrimoniales: reserva.camasMatrimoniales ?? 1,
           camasIndividuales: reserva.camasIndividuales ?? 0,
           cunas: reserva.cunas ?? 0,
+          lateCheckout: reserva.lateCheckout ?? false,
         };
       }
       return { ...f, titularId };
@@ -61,7 +63,7 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
             cunas: Number(forma.cunas),
           };
           try {
-            await onGuardado(reserva, payload);
+            await onGuardado(reserva, payload, forma.lateCheckout);
           } catch (err) {
             setError(err.message);
             setCargando(false);
@@ -141,6 +143,15 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
             />
           </label>
         </div>
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={forma.lateCheckout}
+            onChange={(e) => set('lateCheckout', e.target.checked)}
+          />
+          Late check-out
+        </label>
 
         {error && <div className="error">{error}</div>}
 

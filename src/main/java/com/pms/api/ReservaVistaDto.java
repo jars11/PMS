@@ -17,10 +17,11 @@ public record ReservaVistaDto(
         LocalDate checkIn,
         LocalDate checkOut,
         EstadoReserva estado,
-        boolean activa) {
+        boolean activa,
+        boolean lateCheckout) {
 
-    public static ReservaVistaDto de(ReservaVista v) {
+    public static ReservaVistaDto de(ReservaVista v, boolean lateCheckout) {
         return new ReservaVistaDto(v.id(), v.titular(), v.numerosHabitacion(),
-                v.checkIn(), v.checkOut(), v.estado(), v.activa());
+                v.checkIn(), v.checkOut(), v.estado(), v.activa(), lateCheckout);
     }
 }

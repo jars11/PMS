@@ -964,6 +964,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
           camasIndividuales: ed.camasIndividuales,
           cunas: ed.cunas,
           estado: ed.estado,
+          lateCheckout: ed.lateCheckout,
         });
       }
     } catch (err) {

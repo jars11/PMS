@@ -84,7 +84,7 @@ public class CalendarioController {
     private ReservaVistaDto aVista(Reserva r) {
         return reservas.listarReservas().stream()
                 .filter(v -> v.id() == r.getId())
-                .map(ReservaVistaDto::de)
+                .map(v -> ReservaVistaDto.de(v, r.isLateCheckout()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("reserva no reflejada en la vista"));
     }

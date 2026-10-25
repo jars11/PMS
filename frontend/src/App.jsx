@@ -59,12 +59,26 @@ export default function App() {
     setSesion(null);
   }
 
-  async function guardar(reservaOriginal, payload) {
-    if (reservaOriginal) {
-      await api.editarReserva(reservaOriginal.id, payload);
-    } else {
-      await api.crearReserva(payload);
+  async function guardar(reservaOriginal, payload, lateCheckout) {
+    const guardada = reservaOriginal
+      ? await api.editarReserva(reservaOriginal.id, payload)
+      : await api.crearReserva(payload);
+
+    // Paridad con DialogoReserva.aplicarLateCheckout: en alta se persiste solo
+    // si esta marcado (el default ya es false); en edicion siempre, para poder
+    // destildar. Si el backend rechaza el marcado (otra reserva con check-in el
+    // mismo dia en la habitacion) la reserva ya guardada NO se revierte: se
+    // avisa y el checkbox vuelve destildado porque el flag quedo en false.
+    let aviso = '';
+    if (reservaOriginal || lateCheckout) {
+      try {
+        await api.marcarLateCheckout(guardada.id, lateCheckout);
+      } catch (err) {
+        aviso = err.message;
+      }
     }
+
+    setError(aviso);
     setFormAbierto(false);
     setReservaEnEdicion(null);
     setPrecarga(null);

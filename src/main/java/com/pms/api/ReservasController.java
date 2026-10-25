@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,7 +45,18 @@ public class ReservasController {
 
     @GetMapping
     public List<ReservaVistaDto> listar() {
-        return reservas.listarReservas().stream().map(ReservaVistaDto::de).toList();
+        // El flag lateCheckout no forma parte de la vista plana de negocio
+        // (ReservaVista); se toma de la entidad para que el formulario pueda
+        // precargar el checkbox tambien cuando se edita desde el listado.
+        Map<Long, Boolean> lateCheckoutPorId = new HashMap<>();
+        for (Reserva r : reservas.getReservas()) {
+            if (r.getId() != null) {
+                lateCheckoutPorId.put(r.getId(), r.isLateCheckout());
+            }
+        }
+        return reservas.listarReservas().stream()
+                .map(v -> ReservaVistaDto.de(v, lateCheckoutPorId.getOrDefault(v.id(), false)))
+                .toList();
     }
 
     /** Create/update request shape, mapped to the existing crear/actualizar methods. */
@@ -92,6 +104,23 @@ public class ReservasController {
         return ResponseEntity.ok(aVista(r));
     }
 
+    /** Body of the late check-out toggle, mapped to {@code marcarLateCheckout}. */
+    public record LateCheckoutRequest(boolean lateCheckout) {
+    }
+
+    /**
+     * Toggle del flag {@code lateCheckout} de la reserva, paridad con el
+     * checkbox "Late check-out" de {@code DialogoReserva} en Swing: se reutiliza
+     * {@code marcarLateCheckout}, que rechaza el marcado (409) cuando otra
+     * reserva hace check-in el mismo dia en la habitacion.
+     */
+    @PostMapping("/{id}/late-checkout")
+    public ResponseEntity<ReservaVistaDto> lateCheckout(@PathVariable long id,
+                                                        @RequestBody LateCheckoutRequest req) {
+        Reserva r = reservas.marcarLateCheckout(id, req.lateCheckout());
+        return ResponseEntity.ok(aVista(r));
+    }
+
     @GetMapping("/{id}/edicion")
     public ReservaEdicionDto edicion(@PathVariable long id,
                                      @RequestParam long habitacionId,
@@ -123,7 +152,7 @@ public class ReservasController {
     private ReservaVistaDto aVista(Reserva r) {
         return reservas.listarReservas().stream()
                 .filter(v -> v.id() == r.getId())
-                .map(ReservaVistaDto::de)
+                .map(v -> ReservaVistaDto.de(v, r.isLateCheckout()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("reserva no reflejada en la vista"));
     }

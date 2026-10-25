@@ -13,6 +13,7 @@ import com.pms.utils.TipoMoneda;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,6 +25,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -115,6 +117,75 @@ class ReservasEdicionEliminarTest {
                         .param("habitacionId", String.valueOf(h101))
                         .param("noche", "2026-12-24"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // --------------------------------------- late check-out
+
+    private static String jsonLateCheckout(boolean lateCheckout) {
+        return "{\"lateCheckout\":" + lateCheckout + "}";
+    }
+
+    @Test
+    void marcarYDesmarcarLateCheckoutDevuelveLaVistaActualizada() throws Exception {
+        long h101 = idHabitacion(101);
+        Reserva r = crearReserva(101, "2026-11-01", "2026-11-04", 1, 0, 0);
+
+        mockMvc.perform(post("/api/reservas/" + r.getId() + "/late-checkout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonLateCheckout(true)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(r.getId()))
+                .andExpect(jsonPath("$.lateCheckout").value(true));
+
+        mockMvc.perform(get("/api/reservas/" + r.getId() + "/edicion")
+                        .param("habitacionId", String.valueOf(h101))
+                        .param("noche", "2026-11-02"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lateCheckout").value(true));
+
+        mockMvc.perform(post("/api/reservas/" + r.getId() + "/late-checkout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonLateCheckout(false)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lateCheckout").value(false));
+
+        mockMvc.perform(get("/api/reservas/" + r.getId() + "/edicion")
+                        .param("habitacionId", String.valueOf(h101))
+                        .param("noche", "2026-11-02"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lateCheckout").value(false));
+    }
+
+    @Test
+    void marcarLateCheckoutConCheckInElMismoDiaDevuelve409YSinMutar() throws Exception {
+        long h101 = idHabitacion(101);
+        Reserva r = crearReserva(101, "2026-11-01", "2026-11-04", 1, 0, 0);
+        // La siguiente reserva hace check-in el dia de salida de la primera.
+        crearReserva(101, "2026-11-04", "2026-11-06", 1, 0, 0);
+
+        mockMvc.perform(post("/api/reservas/" + r.getId() + "/late-checkout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonLateCheckout(true)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensaje").value(
+                        "no se puede marcar late check-out: hay una reserva con check-in el mismo día"));
+
+        mockMvc.perform(get("/api/reservas/" + r.getId() + "/edicion")
+                        .param("habitacionId", String.valueOf(h101))
+                        .param("noche", "2026-11-02"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lateCheckout").value(false));
+    }
+
+    @Test
+    void listarExponeElFlagLateCheckoutQuePrecargaElFormulario() throws Exception {
+        Reserva r = crearReserva(101, "2026-11-01", "2026-11-04", 1, 0, 0);
+        ControladorReservas.getInstance().marcarLateCheckout(r.getId(), true);
+
+        mockMvc.perform(get("/api/reservas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(r.getId()))
+                .andExpect(jsonPath("$[0].lateCheckout").value(true));
     }
 
     // --------------------------------------- eliminar

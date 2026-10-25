@@ -50,6 +50,16 @@ export const api = {
   /** Payment-guarded delete: 204 on success, 409 with {mensaje} otherwise. */
   eliminarReserva: (id) => request(`/reservas/${id}`, { method: 'DELETE' }),
 
+  /**
+   * Toggle del flag late check-out de la reserva. El backend rechaza el marcado
+   * con 409 cuando otra reserva hace check-in el mismo dia en la habitacion.
+   */
+  marcarLateCheckout: (id, lateCheckout) =>
+    request(`/reservas/${id}/late-checkout`, {
+      method: 'POST',
+      body: JSON.stringify({ lateCheckout }),
+    }),
+
   calendario: (desde, hasta) =>
     request(`/calendario?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
 
