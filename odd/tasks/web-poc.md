@@ -24,3 +24,6 @@ Portar el PMS de Java Swing a web como spike/PoC. Backend Spring Boot (REST) reu
 - L1. `quiero que pases todo el proyecto actual a web, que deje de ser en java swing, pasalo todo a web`
 - L2. Decisiones: stack Spring Boot + React; reutilizar lógica; calendario lista+formulario primero, D&D después; alcance spike/PoC end-to-end.
 - L3. Login: usuarios hardcodeados en memoria (admin/a, recepcionista/r).
+- L4. T4 completado: frontend React en 25a5055 (`feat(frontend): reservations SPA (login, list, calendar, form)`); `npm run build` ok, `npm run lint` sin errores (solo warnings).
+- L5. T5 completado: `ApiRestTest` (11 tests REST: login, listar habitaciones/titulares/reservas, crear, editar, y errores 400/404/409) en 83ddee2 (`test(api): REST integration coverage`); `mvn test` = 322 tests, 0 fallos, BUILD SUCCESS.
+- L6. Límite de slice: 6 commits en feat/web-poc; package-lock.json infla el conteo de líneas authored. T4 y T5 son el cierre de la feature (work-unit commits independientes).
