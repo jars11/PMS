@@ -12,7 +12,7 @@ Replicar en el frontend React el calendario nocturno del Swing con drag & drop c
 - S6. Navegación: selector de fecha de inicio (dd/MM/yyyy) + botón refrescar. La cantidad de noches visibles se adapta al ancho disponible (default 14).
 - S7. Pintado de barras contiguas: la barra cubre del día de check-in al día de check-out INCLUSIVE. Check-in con inset 25% a la izquierda; cola de check-out al 25% (o 75% con late check-out) en el día de salida; segmentos interiores [0,1]; separación de 2px en bordes compartidos. La ocupación real es half-open [checkIn, checkOut).
 - S8. Backend REST reutiliza ControladorReservas sin reimplementar: ocupación (matrizOcupacion), mover (moverReserva), redimensionar (redimensionarReserva), late-checkout (hayLateCheckoutElDia). No se toca Swing ni se rompen los tests existentes.
-- S9. `Quiero todo igual a como estaba en java swing` — paridad visual/funcional restante del calendario Swing (tooltip de hover, menú contextual, toggle de late check-out, navegación Shift+rueda y doble click para editar). El formato de etiqueta de barras (titular + personas/bebés) ya se replicó en L9.
+- S9. `Quiero todo igual a como estaba en java swing` — paridad visual/funcional restante del calendario Swing (tooltip de hover, menú contextual, toggle de late check-out, navegación Shift+rueda). El formato de etiqueta de barras (titular + personas/bebés) ya se replicó en L9. Nota: Swing no tiene doble click para editar; no se agrega.
 
 ## Contrato REST (fijo)
 
@@ -60,7 +60,7 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 - T5 [S9] Tooltip al pasar el mouse sobre una reserva: titular, fechas, estado, personas/bebés, subtotal (paridad con TablaCalendario). Ruta: writer. Commit: 4d10f9d.
 - T6 [S9] Menú contextual con click derecho: editar reserva y alta en una noche libre (paridad con CalendarioPanel.mostrarMenu). Ruta: writer. Commit: 96547ec.
 - T7 [S9] Toggle de late check-out por reserva. Ruta: writer. Commit: 5b7769c.
-- T8 [S9] Navegación Shift+rueda día a día y doble click para editar. Ruta: writer. Commit: pendiente.
+- T8 [S9] Navegación Shift+rueda día a día (Swing no tiene doble click). Ruta: writer. Commit: b9f1063.
 
 ## Log
 
@@ -77,3 +77,4 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 - L11. T5 completado (4d10f9d): tooltip de reserva con el contenido de Swing (`Reserva #id`, Titular, Habitación, Check-in/out `dd/MM/yyyy`, Noches, Personas · Bebés, Subtotal `USD` es-UY, Estado, Late check-out: sí). Backend: `BloqueOcupacionDto` expone `subtotal`/`moneda` (+ test `ocupacionIncluyeSubtotalYMonedaDelBloque`). Verificado en navegador: `Subtotal: USD 6.000,00`. `mvn -Dtest=CalendarioControllerTest` 7 verdes; build/lint verdes. Backend reiniciado (job-5) para servir el DTO nuevo. Siguiente: T6 (menú contextual).
 - L12. T6 completado (96547ec): menú contextual (click derecho) con 3 acciones. Backend: `EdicionReserva` + `titularId`; `GET /api/reservas/{id}/edicion` (prefill) y `DELETE /api/reservas/{id}` (204 / 409 con `No se puede eliminar: la reserva tiene pagos asociados.`); test `ReservasEdicionEliminarTest` (5). Frontend: `api.edicionReserva`/`eliminarReserva`, menú (Editar/Eliminar sobre reserva; Nueva reserva aquí sobre libre), `ReservaForm` precarga titularId+camas. Verificado en navegador: `[Editar reserva, Eliminar reserva]` y `[Nueva reserva aquí]`. `mvn test` 334 verdes; build/lint verdes. Siguiente: T7 (toggle late check-out).
 - L13. T7 completado (5b7769c): toggle `Late check-out` en el form de reserva (checkbox), precargado en edición; al guardar aplica la regla de Swing (alta: solo si marcado; edición: siempre); 409 → avisa y destilda sin revertir la reserva. Backend: `POST /api/reservas/{id}/late-checkout` + `ReservaVistaDto.lateCheckout` (aditivo); tests. Verificado en navegador: checkbox presente y marcado en edición. `mvn test` 337 verdes; build/lint verdes. Siguiente: T8 (Shift+rueda / doble click).
+- L14. T8 completado (b9f1063): Shift+rueda navega la fecha de inicio día a día (arriba=anterior, abajo=siguiente), con listener nativo no-passive (React registra `wheel` como passive). Swing no tiene doble click, así que no se agregó. Verificado en navegador: `20/10 → 21/10 → 20/10`. build/lint verdes. **Cierra la paridad S9 (T5–T8).**
