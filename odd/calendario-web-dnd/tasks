@@ -2,3 +2,4 @@ T1 backend rest ocupacion mover redimensionar [done] 83f20d2
 T2 frontend calendario grilla barras drag crear [done] a8e9874
 T3 frontend mover redimensionar flechas [done] a8e9874
 T4 verificacion end-to-end [done]
+T5 correccion R4-1 revisar seleccion guard in-flight [done] 872db47
