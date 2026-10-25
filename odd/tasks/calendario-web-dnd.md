@@ -12,6 +12,7 @@ Replicar en el frontend React el calendario nocturno del Swing con drag & drop c
 - S6. Navegación: selector de fecha de inicio (dd/MM/yyyy) + botón refrescar. La cantidad de noches visibles se adapta al ancho disponible (default 14).
 - S7. Pintado de barras contiguas: la barra cubre del día de check-in al día de check-out INCLUSIVE. Check-in con inset 25% a la izquierda; cola de check-out al 25% (o 75% con late check-out) en el día de salida; segmentos interiores [0,1]; separación de 2px en bordes compartidos. La ocupación real es half-open [checkIn, checkOut).
 - S8. Backend REST reutiliza ControladorReservas sin reimplementar: ocupación (matrizOcupacion), mover (moverReserva), redimensionar (redimensionarReserva), late-checkout (hayLateCheckoutElDia). No se toca Swing ni se rompen los tests existentes.
+- S9. `Quiero todo igual a como estaba en java swing` — paridad visual/funcional restante del calendario Swing (tooltip de hover, menú contextual, toggle de late check-out, navegación Shift+rueda y doble click para editar). El formato de etiqueta de barras (titular + personas/bebés) ya se replicó en L9.
 
 ## Contrato REST (fijo)
 
@@ -56,6 +57,10 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 - T2 [S1,S3,S6,S7] Frontend calendario: grilla habitaciones × noches, barras contiguas (GeometriaBarra), selector de fecha de inicio + refrescar, drag para crear con preview y validación de rango libre. Ruta: writer. Commit: a8e9874 (fusionado con T3).
 - T3 [S4,S5] Frontend: selección de reserva con flechas, drag para mover (filas incompatibles en gris), drag para redimensionar. Ruta: writer. Commit: a8e9874 (fusionado con T2).
 - T4 [S1] Verificación end-to-end: mvn test verde, build frontend, pasada manual en ego-lite (crear, seleccionar, barras). Ruta: inline. Commit: (ninguno; cierra la feature).
+- T5 [S9] Tooltip al pasar el mouse sobre una reserva: titular, fechas, estado, personas/bebés, subtotal (paridad con TablaCalendario). Ruta: writer. Commit: pendiente.
+- T6 [S9] Menú contextual con click derecho: editar reserva y alta en una noche libre (paridad con CalendarioPanel.mostrarMenu). Ruta: writer. Commit: pendiente.
+- T7 [S9] Toggle de late check-out por reserva. Ruta: writer. Commit: pendiente.
+- T8 [S9] Navegación Shift+rueda día a día y doble click para editar. Ruta: writer. Commit: pendiente.
 
 ## Log
 
@@ -68,3 +73,4 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 - L7. Revisión RDD: slice frontend (`a8e9874`) aprobado (lineage `review-854747b5e3343d68`). Slice backend (rango desde `e8d2f43`, lineage `review-d4b9bdd9af4b021c`): 3 reviewers + refuter corrieron; el refuter marcó **R4-1 CRITICAL** (`recargar()` perdía la selección tras move/resize, sin guard in-flight, fila destino sin re-validar). Corrección aplicada en `frontend/src/Calendario.jsx` (36 líneas de diff): preservar selección tras recargar, `enVueloRef`, validación de fila destino. Build verde. Bloqueo: el *correction plan* capture se rechaza como `stale` (inconsistencia `authority.revision` 2ac2542a… vs `expected-revision` 454c6a4e… del correction request); el review del backend queda en `correction_required`.
 - L8. Bug reportado: al abrir el diálogo de nueva reserva, las barras del calendario se pintaban por arriba. Causa: `.modal-backdrop` sin `z-index` (auto) vs barras `z-index: 1` y sticky `z-index: 5`. Fix: `z-index: 100` en `.modal-backdrop` (App.css). Verificado en navegador: modal z-index 100 > barras 1 / sticky 5, el form-card recibe el click.
 - L9. Etiquetas de barras (pedido del usuario): se replica el formato de Swing (`EtiquetaReserva`): `Titular — 2👤 + 👶`, conteo reservado primero, nombre truncado con `…`, pintado sobre el rango (cada celda pinta su trozo con el texto desplazado y clip por celda), color `#331a1a`, `pointer-events: none`. Verificado en navegador: `Agustin Rivero — 3👤`, `Ag… 2👤`. Build/lint verdes (fc9abbc).
+- L10. Pedido del usuario: `Quiero todo igual a como estaba en java swing`. La etiqueta de barras ya quedó (L9). Quedan pendientes T5-T8: tooltip de hover, menú contextual (click derecho), toggle de late check-out, y Shift+rueda / doble click para editar. Al retomar: leer este documento hasta `## Log`, reconciliar y continuar por T5.
