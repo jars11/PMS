@@ -34,6 +34,44 @@ function formatearDia(iso) {
   return `${d}/${m}`;
 }
 
+// ------------------------------------------------------- tooltip de reserva
+// Replica la tarjeta que TablaCalendario.htmlReserva pinta en la app Swing.
+// Monto con formato es-UY (miles con punto, decimales con coma) = "USD 7.400,00".
+
+const FORMATO_MONTO = new Intl.NumberFormat('es-UY', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const SEPARADOR_DATO = ' \u00B7 ';
+const MONEDA_POR_DEFECTO = 'USD';
+
+function formatearMonto(monto, moneda) {
+  return `${moneda || MONEDA_POR_DEFECTO} ${FORMATO_MONTO.format(monto)}`;
+}
+
+/** Lineas del tooltip de una barra, en el mismo orden que el Swing. */
+function lineasTooltipReserva(bloque, habitacion) {
+  if (!bloque || !bloque.checkIn || !bloque.checkOut) return [];
+  const lineas = [];
+  lineas.push(`Reserva #${bloque.reservaId}`);
+  lineas.push(`Titular: ${bloque.titular ?? ''}`);
+  if (habitacion && habitacion.numero != null) {
+    lineas.push(`Habitaci\u00f3n: ${habitacion.numero}`);
+  }
+  lineas.push(`Check-in: ${formatearDMA(bloque.checkIn)}`);
+  lineas.push(`Check-out: ${formatearDMA(bloque.checkOut)}`);
+  lineas.push(`Noches: ${diasEntre(bloque.checkIn, bloque.checkOut)}`);
+  let personas = `Personas: ${bloque.personas || 0}`;
+  if (bloque.bebes > 0) personas += `${SEPARADOR_DATO}Beb\u00e9s: ${bloque.bebes}`;
+  lineas.push(personas);
+  if (bloque.subtotal > 0) {
+    lineas.push(`Subtotal: ${formatearMonto(bloque.subtotal, bloque.moneda)}`);
+  }
+  if (bloque.estado != null) lineas.push(`Estado: ${bloque.estado}`);
+  if (bloque.lateCheckout) lineas.push('Late check-out: s\u00ed');
+  return lineas;
+}
+
 function parseDMA(txt) {
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(txt).trim());
   if (!m) return null;
@@ -518,6 +556,12 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
   const estadoRef = useRef(nuevoEstado());
   const modeloRef = useRef(null);
   const enVueloRef = useRef(false);
+  // Tooltip de reserva: el contenido cambia solo al pasar a otra barra, asi que
+  // el estado guarda solo eso; la posicion se actualiza por DOM para no
+  // re-renderizar la grilla en cada movimiento del mouse.
+  const [tooltip, setTooltip] = useState(null);
+  const tooltipRef = useRef(null);
+  const tooltipClaveRef = useRef(null);
   const render = useCallback(() => setTick((t) => t + 1), []);
 
   const noches = containerWidth > 0 ? nochesVisibles(containerWidth) : NOCHES_POR_DEFECTO;
@@ -781,11 +825,76 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
     }
   }
 
+  function ocultarTooltip() {
+    if (tooltipClaveRef.current === null) return;
+    tooltipClaveRef.current = null;
+    setTooltip(null);
+  }
+
+  /** Sigue al mouse y se da vuelta antes de salirse de la ventana. */
+  function posicionarTooltip(x, y) {
+    const el = tooltipRef.current;
+    if (!el) return;
+    const separacion = 14;
+    const margen = 8;
+    const ancho = el.offsetWidth || 0;
+    const alto = el.offsetHeight || 0;
+    let left = x + separacion;
+    let top = y + separacion;
+    if (left + ancho > window.innerWidth - margen) left = Math.max(margen, x - ancho - separacion);
+    if (top + alto > window.innerHeight - margen) top = Math.max(margen, y - alto - separacion);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }
+
+  useEffect(() => {
+    if (tooltip) posicionarTooltip(tooltip.x, tooltip.y);
+  }, [tooltip]);
+
+  /**
+   * Tooltip de hover: solo sobre la barra de una reserva (mismo criterio que
+   * TablaCalendario.textoHover) y nunca mientras se crea, mueve o redimensiona.
+   */
+  function manejarHover(e) {
+    const m = modeloRef.current;
+    const est = estadoRef.current;
+    if (!m || est.tipo !== 'ninguno' || est.presionPendiente) {
+      ocultarTooltip();
+      return;
+    }
+    // Sobre las flechas de redimension el tooltip taparia el handle.
+    if (e.target && e.target.closest && e.target.closest('[data-handle]')) {
+      ocultarTooltip();
+      return;
+    }
+    const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
+    const fila = td ? Number(td.dataset.fila) : -1;
+    const col = td ? Number(td.dataset.col) : -1;
+    const bloque = fila >= 0 && col >= 1 ? bloqueEnPunto(m, fila, col, e, td) : null;
+    if (!bloque) {
+      ocultarTooltip();
+      return;
+    }
+    const clave = `${bloque.reservaId}|${bloque.checkIn}|${bloque.checkOut}`;
+    if (clave !== tooltipClaveRef.current) {
+      tooltipClaveRef.current = clave;
+      setTooltip({
+        lineas: lineasTooltipReserva(bloque, m.habitacionDeFila(fila)),
+        x: e.clientX,
+        y: e.clientY,
+      });
+      return;
+    }
+    posicionarTooltip(e.clientX, e.clientY);
+  }
+
   function manejarPointerDown(e) {
     if (e.button !== 0) return;
     const m = modeloRef.current;
     if (!m) return;
     const est = estadoRef.current;
+    // El tooltip no debe tapar ni frenar el crear/mover/redimensionar.
+    ocultarTooltip();
 
     const handle = e.target && e.target.closest ? e.target.closest('[data-handle]') : null;
     if (handle && est.haySeleccion && est.tipo !== 'redimension') {
@@ -1104,7 +1213,13 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
       {errorCarga && <div className="error banner">{errorCarga}</div>}
       {cargando && !m && <div className="cargando">Cargando calendario…</div>}
 
-      <div className="calendario-scroll" ref={contRef} onPointerDown={manejarPointerDown}>
+      <div
+        className="calendario-scroll"
+        ref={contRef}
+        onPointerDown={manejarPointerDown}
+        onPointerMove={manejarHover}
+        onPointerLeave={ocultarTooltip}
+      >
         {m && (
           <table className="calendario" style={{ width: totalWidth }}>
             <colgroup>
@@ -1142,6 +1257,21 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
           </table>
         )}
       </div>
+
+      {tooltip && (
+        <div
+          className="cal-tooltip"
+          role="tooltip"
+          ref={tooltipRef}
+          style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}
+        >
+          {tooltip.lineas.map((linea, i) => (
+            <span key={i} className={i === 0 ? 'cal-tooltip-titulo' : 'cal-tooltip-linea'}>
+              {linea}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

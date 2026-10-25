@@ -417,6 +417,33 @@ label {
   white-space: nowrap;
 }
 
+/* Tarjeta de informacion de la reserva bajo el mouse (paridad con Swing:
+   TablaCalendario.htmlReserva). Sigue al cursor y nunca es un blanco de eventos,
+   asi que no interfiere con crear/mover/redimensionar. */
+.cal-tooltip {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 280px;
+  padding: 5px 8px;
+  border: 1px solid #8c8c8c;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #222;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.cal-tooltip-titulo {
+  font-weight: 700;
+}
+
 .handle-placa {
   position: absolute;
   top: 3px;

@@ -95,6 +95,18 @@ class CalendarioControllerTest {
     }
 
     @Test
+    void ocupacionIncluyeSubtotalYMonedaDelBloque() throws Exception {
+        // 101 tiene tarifa 1500 por noche: 3 noches -> 4500.0 USD.
+        crearReserva(101, "2026-11-01", "2026-11-04", 1, 1, 0);
+
+        mockMvc.perform(get("/api/calendario").param("desde", "2026-11-01").param("hasta", "2026-11-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].numero").value(101))
+                .andExpect(jsonPath("$[0].bloques[0].subtotal").value(4500.0))
+                .andExpect(jsonPath("$[0].bloques[0].moneda").value("USD"));
+    }
+
+    @Test
     void lateCheckoutEsFalsoSinReserva() throws Exception {
         long h101 = idHabitacion(101);
         mockMvc.perform(get("/api/calendario/late-checkout")
