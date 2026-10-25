@@ -93,6 +93,60 @@ function anchoNoche(ancho, noches) {
   return Math.max(ANCHO_NOCHE_MIN, Math.floor((ancho - ANCHO_HABITACION) / noches));
 }
 
+// ------------------------------------------------- etiqueta de la reserva
+// Mismo formato que EtiquetaReserva en la app Swing: "Titular — 2👤 + 👶".
+
+const PADDING_ETIQUETA = 4;
+const ANCHO_MINIMO_ETIQUETA = 14;
+const SEPARADOR_ETIQUETA = ' \u2014 ';
+const PUNTOS_ETIQUETA = '\u2026';
+const ICONO_PERSONA = '\u{1F464}';
+const ICONO_BEBE = '\u{1F476}';
+// Debe coincidir con la fuente de .barra-etiqueta en App.css para que el
+// recorte del nombre mida igual que lo que se pinta.
+const FUENTE_ETIQUETA = "600 11px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+let contextoTexto = null;
+
+function anchoTexto(texto) {
+  const cadena = texto == null ? '' : String(texto);
+  if (cadena === '') return 0;
+  if (!contextoTexto && typeof document !== 'undefined') {
+    contextoTexto = document.createElement('canvas').getContext('2d');
+    if (contextoTexto) contextoTexto.font = FUENTE_ETIQUETA;
+  }
+  return contextoTexto ? contextoTexto.measureText(cadena).width : 0;
+}
+
+function conteoReserva(personas, bebes) {
+  const totalPersonas = Math.max(0, personas || 0);
+  const totalBebes = Math.max(0, bebes || 0);
+  let texto = '';
+  if (totalPersonas > 0) {
+    texto += totalPersonas === 1 ? ICONO_PERSONA : `${totalPersonas}${ICONO_PERSONA}`;
+  }
+  if (totalBebes > 0) {
+    if (texto !== '') texto += ' + ';
+    texto += totalBebes === 1 ? ICONO_BEBE : `${totalBebes}${ICONO_BEBE}`;
+  }
+  return texto;
+}
+
+/** Recorta conservando el principio y agregando "…"; "" si ni los puntos entran. */
+function truncarTexto(texto, maxAncho) {
+  const original = texto == null ? '' : String(texto);
+  if (original === '' || maxAncho <= 0) return '';
+  if (anchoTexto(original) <= maxAncho) return original;
+  if (anchoTexto(PUNTOS_ETIQUETA) > maxAncho) return '';
+  const caracteres = Array.from(original);
+  let corte = caracteres.length;
+  while (corte > 0 && anchoTexto(caracteres.slice(0, corte).join('').trimEnd() + PUNTOS_ETIQUETA) > maxAncho) {
+    corte--;
+  }
+  const limpio = caracteres.slice(0, corte).join('').trimEnd();
+  return limpio === '' ? '' : limpio + PUNTOS_ETIQUETA;
+}
+
 // ------------------------------------------------------- estado de arrastre
 
 function nuevoEstado() {
@@ -416,24 +470,26 @@ function celdaInfo(m, est, fila, col, fecha) {
   const tail = bloques.find((b) => b.reservaId !== ignorar && b.checkOut === fecha);
   if (tail) {
     const seg = segmento(tail, fecha);
-    if (seg) segments.push({ ...seg, clase: gris ? 'barra barra-gris' : 'barra' });
+    if (seg) segments.push({ ...seg, clase: gris ? 'barra barra-gris' : 'barra', bloque: tail });
   }
   const head = bloques.find((b) => b.reservaId !== ignorar && b.checkIn <= fecha && fecha < b.checkOut);
   if (head) {
     const seg = segmento(head, fecha);
-    if (seg) segments.push({ ...seg, clase: gris ? 'barra barra-gris' : 'barra' });
+    if (seg) segments.push({ ...seg, clase: gris ? 'barra barra-gris' : 'barra', bloque: head });
   }
 
   if (enMovimiento && fila === est.filaDestino && est.filaDestino !== est.filaOrigen && est.bloqueOrigen) {
     const seg = segmento(est.bloqueOrigen, fecha);
-    if (seg) segments.push({ ...seg, clase: 'barra barra-preview' });
+    if (seg) segments.push({ ...seg, clase: 'barra barra-preview', bloque: est.bloqueOrigen });
   }
   if (enRedimension && fila === est.filaSeleccionada && est.inicioRedimension && est.finRedimension && est.bloqueSeleccionado) {
-    const seg = segmento(
-      { checkIn: est.inicioRedimension, checkOut: est.finRedimension, lateCheckout: est.bloqueSeleccionado.lateCheckout },
-      fecha,
-    );
-    if (seg) segments.push({ ...seg, clase: 'barra barra-preview' });
+    const rango = {
+      checkIn: est.inicioRedimension,
+      checkOut: est.finRedimension,
+      lateCheckout: est.bloqueSeleccionado.lateCheckout,
+    };
+    const seg = segmento(rango, fecha);
+    if (seg) segments.push({ ...seg, clase: 'barra barra-preview', bloque: { ...est.bloqueSeleccionado, ...rango } });
   }
   if (est.tipo === 'rango' && est.rangoExtendido && esCeldaSeleccionada(est, fila, col)) {
     const sIni = seleccionIni(est);
@@ -883,6 +939,61 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
     ? ANCHO_HABITACION + m.fechas.reduce((acc, _f, i) => acc + anchoCol(i + 1), 0)
     : ANCHO_HABITACION + noches * ANCHO_NOCHE_MIN;
 
+  // --------------------------------------------------- etiqueta de reserva
+  // Desplazamiento horizontal de cada columna dentro de la fila, para ubicar la
+  // etiqueta desde el check-in real hasta el check-out real aunque cruce celdas.
+  const totalColumnas = m ? m.fechas.length : noches;
+  const izquierdaDeCol = [];
+  let acumulado = ANCHO_HABITACION;
+  for (let col = 1; col <= totalColumnas; col++) {
+    izquierdaDeCol[col] = acumulado;
+    acumulado += anchoCol(col);
+  }
+
+  /**
+   * Disposicion absoluta (dentro de la fila) de la etiqueta de un bloque: mismo
+   * criterio que TablaCalendario.pintarEtiqueta en Swing. Devuelve null cuando
+   * el rango visible mide menos de 14 px o no hay nada que pintar.
+   */
+  function disposicionEtiqueta(bloque) {
+    if (!m || !bloque || !bloque.checkIn || !bloque.checkOut) return null;
+    const colIni = Math.max(1, m.columnaDeFecha(bloque.checkIn));
+    const colFinBruta = m.columnaDeFecha(bloque.checkOut);
+    const colFin = colFinBruta >= 1 ? Math.min(colFinBruta, m.noches) : m.noches;
+    if (colFin < colIni || izquierdaDeCol[colIni] == null) return null;
+    const segIni = segmento(bloque, m.fechaDeColumna(colIni));
+    const segFin = segmento(bloque, m.fechaDeColumna(colFin));
+    if (!segIni || !segFin) return null;
+
+    const [x0Seg] = pixeles(segIni, anchoCol(colIni));
+    const [, x1Seg] = pixeles(segFin, anchoCol(colFin));
+    const inicio = izquierdaDeCol[colIni] + x0Seg + PADDING_ETIQUETA;
+    const fin = izquierdaDeCol[colFin] + x1Seg - PADDING_ETIQUETA;
+    const ancho = fin - inicio;
+    if (ancho < ANCHO_MINIMO_ETIQUETA) return null;
+
+    // El conteo se reserva primero: el nombre se recorta al espacio restante.
+    const conteo = conteoReserva(bloque.personas, bloque.bebes);
+    const anchoConteo = anchoTexto(conteo);
+    const anchoGuion = anchoTexto(SEPARADOR_ETIQUETA);
+    const anchoNombreMinimo = anchoTexto(`M${PUNTOS_ETIQUETA}`);
+    const usarGuion = conteo !== '' && ancho - anchoConteo - anchoGuion >= anchoNombreMinimo;
+    const sufijo = conteo === '' ? '' : usarGuion ? SEPARADOR_ETIQUETA + conteo : ` ${conteo}`;
+    const nombre = truncarTexto(bloque.titular, Math.max(0, ancho - anchoTexto(sufijo)));
+    const texto = nombre + sufijo;
+    if (texto === '') return null;
+    return { inicio, fin, texto };
+  }
+
+  const cacheEtiquetas = new Map();
+  function etiquetaDeSegmento(s) {
+    if (!s || !s.bloque) return null;
+    const b = s.bloque;
+    const clave = [s.clase, b.reservaId, b.checkIn, b.checkOut, b.lateCheckout, b.personas, b.bebes, b.titular].join('|');
+    if (!cacheEtiquetas.has(clave)) cacheEtiquetas.set(clave, disposicionEtiqueta(b));
+    return cacheEtiquetas.get(clave);
+  }
+
   function renderHandle(borde, pos) {
     const izqDir = borde === 'inicio' ? 'alargar' : 'acortar';
     const derDir = borde === 'inicio' ? 'acortar' : 'alargar';
@@ -917,12 +1028,33 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
       }
     }
 
+    const etiquetas = [];
+    const celdas = info.segments.map((s, i) => {
+      const [x0, x1] = pixeles(s, ancho);
+      const disp = etiquetaDeSegmento(s);
+      if (disp) {
+        // Cada celda pinta su trozo de etiqueta: el texto se corre hacia la
+        // izquierda para que se lea continuo y el recorte lo hace la celda.
+        const celdaIzq = izquierdaDeCol[col] ?? 0;
+        const desde = Math.max(disp.inicio, celdaIzq);
+        const hasta = Math.min(disp.fin, celdaIzq + ancho);
+        if (hasta > desde) {
+          etiquetas.push(
+            <span key={`e${i}`} className="barra-etiqueta" style={{ left: desde - celdaIzq, width: hasta - desde }}>
+              <span className="barra-etiqueta-texto" style={{ left: -(desde - disp.inicio) }}>
+                {disp.texto}
+              </span>
+            </span>,
+          );
+        }
+      }
+      return <span key={i} className={s.clase} style={{ left: x0, width: Math.max(0, x1 - x0) }} />;
+    });
+
     return (
       <td key={fecha} className={`cal-celda ${info.clase}`} data-col={col} data-fila={fila} style={{ width: ancho }}>
-        {info.segments.map((s, i) => {
-          const [x0, x1] = pixeles(s, ancho);
-          return <span key={i} className={s.clase} style={{ left: x0, width: Math.max(0, x1 - x0) }} />;
-        })}
+        {celdas}
+        {etiquetas}
         {handleInicio && renderHandle('inicio', handleInicio)}
         {handleFin && renderHandle('fin', handleFin)}
       </td>
