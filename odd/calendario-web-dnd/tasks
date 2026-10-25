@@ -4,7 +4,7 @@ T3 frontend mover redimensionar flechas [done] a8e9874
 T4 verificacion end-to-end [done]
 T5 correccion R4-1 revisar seleccion guard in-flight [done] 872db47
 T6 etiquetas de barras titular personas bebes [done] fc9abbc
-T7 tooltip hover sobre reserva (titular fechas estado personas bebes subtotal) [pending]
+T7 tooltip hover sobre reserva (titular fechas estado personas bebes subtotal) [done] 4d10f9d
 T8 menu contextual click derecho (editar, alta en noche libre) [pending]
 T9 toggle late check-out por reserva [pending]
 T10 shift+rueda navegar dia a dia y doble click para editar [pending]
