@@ -4,6 +4,7 @@ import ReservasLista from './ReservasLista';
 import Calendario from './Calendario';
 import ReservaForm from './ReservaForm';
 import { api } from './api';
+import './App.css';
 
 export default function App() {
   const [sesion, setSesion] = useState(null);
