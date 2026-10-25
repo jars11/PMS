@@ -119,6 +119,7 @@ export default function App() {
         <Calendario
           habitaciones={habitaciones}
           onNuevaPrecargada={(p) => { setReservaEnEdicion(null); setPrecarga(p); setFormAbierto(true); }}
+          onEditarReserva={(r) => { setReservaEnEdicion(r); setPrecarga(null); setFormAbierto(true); }}
           onCambio={refrescarReservas}
           refreshSignal={calendarioVersion}
         />

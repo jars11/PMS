@@ -505,6 +505,7 @@ class ControladorReservasTest {
         ControladorReservas.EdicionReserva ed = cr.edicionDe(original.getId(), h103,
                 LocalDate.of(2026, 11, 3));
         assertEquals("Maria Perez", ed.titular());
+        assertEquals(maria.getId(), ed.titularId());
         assertEquals(LocalDate.of(2026, 11, 2), ed.checkIn());
         assertEquals(LocalDate.of(2026, 11, 6), ed.checkOut());
         assertEquals(2, ed.camasMatrimoniales());

@@ -543,7 +543,7 @@ function celdaInfo(m, est, fila, col, fecha) {
   return { clase, segments };
 }
 
-export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, refreshSignal = 0 }) {
+export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarReserva, onCambio, refreshSignal = 0 }) {
   const contRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [fechaInicio, setFechaInicio] = useState(() => fechaISO(new Date()));
@@ -562,6 +562,8 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
   const [tooltip, setTooltip] = useState(null);
   const tooltipRef = useRef(null);
   const tooltipClaveRef = useRef(null);
+  // Menu contextual (click derecho), igual que CalendarioPanel.mostrarMenu.
+  const [menu, setMenu] = useState(null);
   const render = useCallback(() => setTick((t) => t + 1), []);
 
   const noches = containerWidth > 0 ? nochesVisibles(containerWidth) : NOCHES_POR_DEFECTO;
@@ -606,6 +608,32 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
   useEffect(() => {
     onCambioRef.current = onCambio;
   }, [onCambio]);
+
+  const onEditarRef = useRef(onEditarReserva);
+  useEffect(() => {
+    onEditarRef.current = onEditarReserva;
+  }, [onEditarReserva]);
+
+  // El menu contextual se cierra con Escape, al hacer click afuera o al scrollear.
+  useEffect(() => {
+    if (!menu) return undefined;
+    const cerrar = () => setMenu(null);
+    const cerrarFuera = (e) => {
+      if (e.target && e.target.closest && e.target.closest('.cal-menu')) return;
+      cerrar();
+    };
+    const tecla = (e) => {
+      if (e.key === 'Escape') cerrar();
+    };
+    window.addEventListener('pointerdown', cerrarFuera);
+    window.addEventListener('keydown', tecla);
+    window.addEventListener('scroll', cerrar, true);
+    return () => {
+      window.removeEventListener('pointerdown', cerrarFuera);
+      window.removeEventListener('keydown', tecla);
+      window.removeEventListener('scroll', cerrar, true);
+    };
+  }, [menu]);
 
   useEffect(() => {
     const el = contRef.current;
@@ -886,6 +914,91 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
       return;
     }
     posicionarTooltip(e.clientX, e.clientY);
+  }
+
+  // ------------------------------------------- menu contextual (click derecho)
+
+  /**
+   * Mismo criterio que CalendarioPanel.mostrarMenu + SeleccionCalendario.accionDe:
+   * una noche ocupada ofrece editar/eliminar; una libre, el alta en esa noche.
+   */
+  function manejarContextMenu(e) {
+    const m = modeloRef.current;
+    if (!m) return;
+    const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
+    if (!td) return;
+    const fila = Number(td.dataset.fila);
+    const col = Number(td.dataset.col);
+    if (fila < 0 || col < 1 || col > m.noches) return;
+    const hab = m.habitacionDeFila(fila);
+    const noche = m.fechaDeColumna(col);
+    if (!hab || hab.id == null || !noche) return;
+
+    e.preventDefault();
+    ocultarTooltip();
+    const bloque = m.estaOcupada(fila, col) ? m.bloqueEn(fila, col) : null;
+    setMenu({
+      tipo: bloque ? 'reserva' : 'nueva',
+      reservaId: bloque ? bloque.reservaId : null,
+      habitacionId: hab.id,
+      noche,
+      x: Math.max(0, Math.min(e.clientX, window.innerWidth - 200)),
+      y: Math.max(0, Math.min(e.clientY, window.innerHeight - 110)),
+    });
+  }
+
+  async function editarDesdeMenu() {
+    const item = menu;
+    if (!item || item.tipo !== 'reserva') return;
+    setMenu(null);
+    try {
+      const ed = await api.edicionReserva(item.reservaId, item.habitacionId, item.noche);
+      if (onEditarRef.current) {
+        onEditarRef.current({
+          id: ed.reservaId,
+          titularId: ed.titularId,
+          habitacionId: ed.habitacionId,
+          checkIn: ed.checkIn,
+          checkOut: ed.checkOut,
+          camasMatrimoniales: ed.camasMatrimoniales,
+          camasIndividuales: ed.camasIndividuales,
+          cunas: ed.cunas,
+          estado: ed.estado,
+        });
+      }
+    } catch (err) {
+      setAviso({ tipo: 'error', titulo: 'No se pudo abrir la edición', mensaje: err.message });
+    }
+  }
+
+  async function eliminarDesdeMenu() {
+    const item = menu;
+    if (!item || item.tipo !== 'reserva') return;
+    setMenu(null);
+    if (!window.confirm(`¿Eliminar la reserva #${item.reservaId}?`)) return;
+    enVueloRef.current = true;
+    try {
+      await api.eliminarReserva(item.reservaId);
+      await recargarRef.current();
+      if (onCambioRef.current) onCambioRef.current();
+    } catch (err) {
+      setAviso({ tipo: 'error', titulo: 'No se pudo eliminar', mensaje: err.message });
+    } finally {
+      enVueloRef.current = false;
+    }
+  }
+
+  function nuevaDesdeMenu() {
+    const item = menu;
+    if (!item || item.tipo !== 'nueva') return;
+    setMenu(null);
+    if (onNuevaRef.current) {
+      onNuevaRef.current({
+        habitacionId: item.habitacionId,
+        checkIn: item.noche,
+        checkOut: sumarDias(item.noche, 1),
+      });
+    }
   }
 
   function manejarPointerDown(e) {
@@ -1219,6 +1332,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
         onPointerDown={manejarPointerDown}
         onPointerMove={manejarHover}
         onPointerLeave={ocultarTooltip}
+        onContextMenu={manejarContextMenu}
       >
         {m && (
           <table className="calendario" style={{ width: totalWidth }}>
@@ -1270,6 +1384,25 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, 
               {linea}
             </span>
           ))}
+        </div>
+      )}
+
+      {menu && (
+        <div className="cal-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+          {menu.tipo === 'reserva' ? (
+            <>
+              <button type="button" role="menuitem" className="cal-menu-item" onClick={editarDesdeMenu}>
+                Editar reserva
+              </button>
+              <button type="button" role="menuitem" className="cal-menu-item" onClick={eliminarDesdeMenu}>
+                Eliminar reserva
+              </button>
+            </>
+          ) : (
+            <button type="button" role="menuitem" className="cal-menu-item" onClick={nuevaDesdeMenu}>
+              Nueva reserva aquí
+            </button>
+          )}
         </div>
       )}
     </div>

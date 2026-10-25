@@ -4,12 +4,12 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
   const esEdicion = Boolean(reserva);
   const [forma, setForma] = useState({
     titularId: reserva?.titularId ?? '',
-    habitacionId: reserva ? '' : (precarga?.habitacionId ?? ''),
+    habitacionId: reserva ? (reserva.habitacionId ?? '') : (precarga?.habitacionId ?? ''),
     checkIn: reserva?.checkIn ?? precarga?.checkIn ?? '',
     checkOut: reserva?.checkOut ?? precarga?.checkOut ?? '',
-    camasMatrimoniales: 1,
-    camasIndividuales: 0,
-    cunas: 0,
+    camasMatrimoniales: reserva?.camasMatrimoniales ?? 1,
+    camasIndividuales: reserva?.camasIndividuales ?? 0,
+    cunas: reserva?.cunas ?? 0,
   });
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -19,15 +19,20 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
     setForma((f) => {
       const titularId = !f.titularId && titulares.length > 0 ? titulares[0].id : f.titularId;
       if (reserva) {
-        const hab = habitaciones.find((h) => h.numero === reserva.numerosHabitacion[0]);
+        // La edicion desde el calendario ya trae habitacionId; la de la lista,
+        // solo el numero, asi que se resuelve por numero como fallback.
+        const hab =
+          reserva.habitacionId != null
+            ? null
+            : habitaciones.find((h) => h.numero === reserva.numerosHabitacion?.[0]);
         return {
           titularId,
-          habitacionId: hab ? hab.id : '',
+          habitacionId: reserva.habitacionId ?? (hab ? hab.id : ''),
           checkIn: reserva.checkIn,
           checkOut: reserva.checkOut,
-          camasMatrimoniales: 1,
-          camasIndividuales: 0,
-          cunas: 0,
+          camasMatrimoniales: reserva.camasMatrimoniales ?? 1,
+          camasIndividuales: reserva.camasIndividuales ?? 0,
+          cunas: reserva.cunas ?? 0,
         };
       }
       return { ...f, titularId };

@@ -162,7 +162,7 @@ public class ControladorReservas {
      * cobertura half-open {@code [fechaInicio, fechaFin)}.
      */
     public record EdicionReserva(long reservaId, long habitacionId, LocalDate nocheObjetivo,
-                                 String titular, LocalDate checkIn, LocalDate checkOut,
+                                 String titular, Long titularId, LocalDate checkIn, LocalDate checkOut,
                                  int camasMatrimoniales, int camasIndividuales, int cunas,
                                  EstadoReserva estado, boolean lateCheckout,
                                  Set<AtributoHabitacion> atributos,
@@ -709,6 +709,7 @@ public class ControladorReservas {
             TitularReserva t = r.getTitular();
             return new EdicionReserva(r.getId(), habitacionId, noche,
                     t == null ? "" : nombreTitular(t),
+                    t == null ? null : t.getId(),
                     objetivo.getFechaInicio(), objetivo.getFechaFin(),
                     objetivo.getCamasMatrimoniales(), objetivo.getCamasIndividuales(),
                     objetivo.getCunas(), r.getEstado(), r.isLateCheckout(),

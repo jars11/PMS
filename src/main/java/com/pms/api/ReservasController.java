@@ -9,27 +9,35 @@ import com.pms.utils.EstadoReserva;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Reservations REST endpoints for the web PoC. Each operation delegates to the
  * existing {@link ControladorReservas} business logic (no reimplementation):
  * list reuses {@code listarReservas()}, create reuses {@code crearReservaPara},
  * edit reuses {@code actualizarReserva} by targeting the reservation's single
- * proposal.
+ * proposal, the calendar context menu reuses {@code edicionDe} (prefill) and
+ * {@code eliminarReserva} (payment-guarded delete).
  */
 @RestController
 @RequestMapping("/api/reservas")
 public class ReservasController {
+
+    /** Same wording as the Swing deletion guard (CalendarioPanel.eliminarReserva). */
+    static final String MENSAJE_ELIMINAR_CON_PAGOS =
+            "No se puede eliminar: la reserva tiene pagos asociados.";
 
     private final ControladorReservas reservas = ControladorReservas.getInstance();
     private final RepositorioPersonas repositorioPersonas = new RepositorioPersonas();
@@ -82,6 +90,23 @@ public class ReservasController {
                 EstadoReserva.PendienteDePago);
 
         return ResponseEntity.ok(aVista(r));
+    }
+
+    @GetMapping("/{id}/edicion")
+    public ReservaEdicionDto edicion(@PathVariable long id,
+                                     @RequestParam long habitacionId,
+                                     @RequestParam String noche) {
+        return ReservaEdicionDto.de(reservas.edicionDe(id, habitacionId, LocalDate.parse(noche)));
+    }
+
+    /** Payment-guarded delete: 204 when removed, 409 when it has payments. */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> eliminar(@PathVariable long id) {
+        if (reservas.eliminarReserva(id)) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("mensaje", MENSAJE_ELIMINAR_CON_PAGOS));
     }
 
     private TitularReserva titular(Long titularId) {

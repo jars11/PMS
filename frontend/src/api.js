@@ -40,6 +40,16 @@ export const api = {
   editarReserva: (id, payload) =>
     request(`/reservas/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
+  /** Prefill of ONE proposal, for the calendar context menu edit flow. */
+  edicionReserva: (id, habitacionId, noche) =>
+    request(
+      `/reservas/${id}/edicion?habitacionId=${encodeURIComponent(habitacionId)}` +
+        `&noche=${encodeURIComponent(noche)}`,
+    ),
+
+  /** Payment-guarded delete: 204 on success, 409 with {mensaje} otherwise. */
+  eliminarReserva: (id) => request(`/reservas/${id}`, { method: 'DELETE' }),
+
   calendario: (desde, hasta) =>
     request(`/calendario?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
 

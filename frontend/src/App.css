@@ -444,6 +444,38 @@ label {
   font-weight: 700;
 }
 
+/* Menu contextual del calendario (click derecho), paridad con JPopupMenu. */
+.cal-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 184px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--texto);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.cal-menu-item {
+  padding: 7px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.cal-menu-item:hover {
+  background: #1d4ed8;
+  color: #fff;
+}
+
 .handle-placa {
   position: absolute;
   top: 3px;
