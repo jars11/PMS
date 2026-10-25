@@ -16,6 +16,8 @@ export default function App() {
   const [error, setError] = useState('');
   const [formAbierto, setFormAbierto] = useState(false);
   const [reservaEnEdicion, setReservaEnEdicion] = useState(null);
+  const [precarga, setPrecarga] = useState(null);
+  const [calendarioVersion, setCalendarioVersion] = useState(0);
 
   const cargarDatos = useCallback(async () => {
     setError('');
@@ -44,6 +46,14 @@ export default function App() {
     if (sesion) cargarDatos();
   }, [sesion, cargarDatos]);
 
+  const refrescarReservas = useCallback(async () => {
+    try {
+      setReservas(await api.reservas());
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
   function salir() {
     localStorage.removeItem('pms.sesion');
     setSesion(null);
@@ -57,7 +67,9 @@ export default function App() {
     }
     setFormAbierto(false);
     setReservaEnEdicion(null);
-    await cargarDatos();
+    setPrecarga(null);
+    await refrescarReservas();
+    setCalendarioVersion((v) => v + 1);
   }
 
   if (!sesion) {
@@ -88,7 +100,7 @@ export default function App() {
         >
           Calendario
         </button>
-        <button className="nueva" onClick={() => { setReservaEnEdicion(null); setFormAbierto(true); }}>
+        <button className="nueva" onClick={() => { setReservaEnEdicion(null); setPrecarga(null); setFormAbierto(true); }}>
           + Nueva reserva
         </button>
       </nav>
@@ -99,12 +111,17 @@ export default function App() {
       {!cargando && pestana === 'lista' && (
         <ReservasLista
           reservas={reservas}
-          onEditar={(r) => { setReservaEnEdicion(r); setFormAbierto(true); }}
+          onEditar={(r) => { setReservaEnEdicion(r); setPrecarga(null); setFormAbierto(true); }}
         />
       )}
 
       {!cargando && pestana === 'calendario' && (
-        <Calendario habitaciones={habitaciones} reservas={reservas} />
+        <Calendario
+          habitaciones={habitaciones}
+          onNuevaPrecargada={(p) => { setReservaEnEdicion(null); setPrecarga(p); setFormAbierto(true); }}
+          onCambio={refrescarReservas}
+          refreshSignal={calendarioVersion}
+        />
       )}
 
       {formAbierto && (
@@ -112,7 +129,8 @@ export default function App() {
           titulares={titulares}
           habitaciones={habitaciones}
           reserva={reservaEnEdicion}
-          onCancelar={() => { setFormAbierto(false); setReservaEnEdicion(null); }}
+          precarga={precarga}
+          onCancelar={() => { setFormAbierto(false); setReservaEnEdicion(null); setPrecarga(null); }}
           onGuardado={guardar}
         />
       )}

@@ -1,68 +1,984 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from './api';
 
-function formatear(fechaISO) {
-  const d = new Date(`${fechaISO}T00:00:00`);
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+// ---------------------------------------------------------------- fechas
+
+function parseISO(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 function fechaISO(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-// Builds a room x nights grid, marking each night occupied by an active reservation.
-export default function Calendario({ habitaciones, reservas, dias = 14 }) {
-  const { fechas, ocupacion } = useMemo(() => {
-    const hoy = new Date();
-    const fechasArr = [];
-    for (let i = 0; i < dias; i++) {
-      const d = new Date(hoy);
-      d.setDate(d.getDate() + i);
-      fechasArr.push(fechaISO(d));
-    }
+function sumarDias(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return fechaISO(new Date(y, m - 1, d + n));
+}
 
-    const porHab = new Map();
-    for (const r of reservas) {
-      if (!r.activa) continue;
-      const ini = r.checkIn;
-      const fin = r.checkOut;
-      for (const num of r.numerosHabitacion) {
-        for (const f of fechasArr) {
-          if (f >= ini && f < fin) {
-            if (!porHab.has(num)) porHab.set(num, new Set());
-            porHab.get(num).add(f);
-          }
-        }
+function diasEntre(a, b) {
+  return Math.round((parseISO(b) - parseISO(a)) / 86400000);
+}
+
+function formatearDMA(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function formatearDia(iso) {
+  const [, m, d] = iso.split('-');
+  return `${d}/${m}`;
+}
+
+function parseDMA(txt) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(txt).trim());
+  if (!m) return null;
+  const d = Number(m[1]);
+  const mo = Number(m[2]);
+  const y = Number(m[3]);
+  const fecha = new Date(y, mo - 1, d);
+  if (fecha.getFullYear() !== y || fecha.getMonth() !== mo - 1 || fecha.getDate() !== d) {
+    return null;
+  }
+  return fechaISO(fecha);
+}
+
+// ----------------------------------------------------------- GeometriaBarra
+
+const INSET_CHECKIN = 0.25;
+const INSET_CHECKOUT_NORMAL = 0.25;
+const INSET_CHECKOUT_LATE = 0.75;
+const SEPARACION_PX = 2;
+const ANCHO_HABITACION = 110;
+const ANCHO_NOCHE_MIN = 56;
+const NOCHES_POR_DEFECTO = 14;
+const MARGEN_VERTICAL = 4;
+const UMBRAL_ARRASTRE_PX = 5;
+const ANCHO_FLECHA = 9;
+const ANCHO_PLACA = 2 * ANCHO_FLECHA;
+
+function segmento(bloque, dia) {
+  if (!bloque || !dia || !bloque.checkIn || !bloque.checkOut) return null;
+  if (dia === bloque.checkIn) return { x0: INSET_CHECKIN, x1: 1 };
+  if (dia === bloque.checkOut) {
+    return { x0: 0, x1: bloque.lateCheckout ? INSET_CHECKOUT_LATE : INSET_CHECKOUT_NORMAL };
+  }
+  if (dia > bloque.checkIn && dia < bloque.checkOut) return { x0: 0, x1: 1 };
+  return null;
+}
+
+function pixeles(seg, ancho) {
+  if (!seg || ancho <= 0) return [0, 0];
+  let x0 = Math.round(seg.x0 * ancho);
+  let x1 = Math.round(seg.x1 * ancho);
+  if (seg.x0 > 0) x0 += SEPARACION_PX;
+  if (seg.x1 < 1) x1 -= SEPARACION_PX;
+  x0 = Math.max(0, Math.min(ancho, x0));
+  x1 = Math.max(0, Math.min(ancho, x1));
+  if (x1 < x0) x1 = x0;
+  return [x0, x1];
+}
+
+function nochesVisibles(ancho) {
+  if (ancho <= ANCHO_HABITACION || ancho <= 0) return NOCHES_POR_DEFECTO;
+  return Math.max(1, Math.floor((ancho - ANCHO_HABITACION) / ANCHO_NOCHE_MIN));
+}
+
+function anchoNoche(ancho, noches) {
+  if (noches <= 0 || ancho <= ANCHO_HABITACION) return ANCHO_NOCHE_MIN;
+  return Math.max(ANCHO_NOCHE_MIN, Math.floor((ancho - ANCHO_HABITACION) / noches));
+}
+
+// ------------------------------------------------------- estado de arrastre
+
+function nuevoEstado() {
+  return {
+    tipo: 'ninguno',
+    filaOrigen: -1,
+    colIni: -1,
+    colFin: -1,
+    ultimaColumna: -1,
+    rangoExtendido: false,
+    filaHover: -1,
+    filaDestino: -1,
+    bloqueOrigen: null,
+    reservaOrigenId: null,
+    compatiblePorFila: [],
+    haySeleccion: false,
+    filaSeleccionada: -1,
+    reservaSeleccionadaId: null,
+    bloqueSeleccionado: null,
+    bordeRedimension: null,
+    direccionRedimension: null,
+    inicioRedimension: null,
+    finRedimension: null,
+    resizeBordeX: 0,
+    resizeAnchoCelda: 0,
+    presionPendiente: false,
+    filaPresion: -1,
+    columnaPresion: -1,
+    puntoPresion: null,
+    bloquePresion: null,
+  };
+}
+
+function seleccionIni(est) {
+  if (est.tipo !== 'rango') return -1;
+  if (est.colFin < est.colIni) return est.colFin;
+  if (est.colFin === est.colIni && est.colIni >= est.ultimaColumna) {
+    return Math.max(1, est.ultimaColumna - 1);
+  }
+  return est.colIni;
+}
+
+function seleccionFin(est) {
+  if (est.tipo !== 'rango') return -1;
+  if (est.colFin < est.colIni) return est.colIni;
+  if (est.colFin === est.colIni) return Math.min(est.colIni + 1, est.ultimaColumna);
+  return est.colFin;
+}
+
+function esCeldaSeleccionada(est, fila, col) {
+  if (est.tipo !== 'rango' || fila !== est.filaOrigen || col < 1) return false;
+  if (!est.rangoExtendido) return col === est.colIni;
+  return col >= seleccionIni(est) && col <= seleccionFin(est);
+}
+
+function ocultarBloqueOrigen(est) {
+  return est.tipo === 'movimiento' && est.filaDestino >= 0 && est.filaDestino !== est.filaOrigen;
+}
+
+function esElBloqueSeleccionado(est, bloque, fila) {
+  if (!bloque || !est.haySeleccion || fila !== est.filaSeleccionada) return false;
+  const sel = est.bloqueSeleccionado;
+  return (
+    !!sel &&
+    sel.checkIn === bloque.checkIn &&
+    sel.checkOut === bloque.checkOut &&
+    est.reservaSeleccionadaId != null &&
+    est.reservaSeleccionadaId === bloque.reservaId
+  );
+}
+
+function resolverDestino(filaHover, filaOrigen, filas, compatiblePorFila) {
+  if (filaHover < 0 || filaHover >= filas) return -1;
+  if (filaHover === filaOrigen) return filaHover;
+  if (!compatiblePorFila[filaHover]) return -1;
+  return filaHover;
+}
+
+function diasRedimension(deltaX, anchoCelda, borde) {
+  const signo = borde === 'inicio' ? -1 : 1;
+  const avance = deltaX * signo;
+  const ancho = Math.max(1, anchoCelda);
+  const umbral = Math.max(1, Math.floor(ancho / 4));
+  if (Math.abs(avance) <= umbral) return 0;
+  const dias = 1 + Math.floor((Math.abs(avance) - umbral) / ancho);
+  return avance > 0 ? dias : -dias;
+}
+
+function contieneBarra(seg, ancho, x) {
+  if (!seg) return false;
+  const [x0, x1] = pixeles(seg, ancho);
+  return x >= x0 && x <= x1;
+}
+
+// --------------------------------------------------------------- modelo
+
+function construirModelo(ocupacion, habitaciones, desde, noches) {
+  const fechas = [];
+  for (let i = 0; i < noches; i++) fechas.push(sumarDias(desde, i));
+
+  const habitacionPorId = new Map((habitaciones || []).map((h) => [h.id, h]));
+  const filas = (ocupacion || []).map((o) => ({
+    ...o,
+    habitacion: habitacionPorId.get(o.habitacionId) || null,
+  }));
+
+  const ocupadasPorHab = new Map();
+  for (const fila of filas) {
+    const set = new Set();
+    for (const b of fila.bloques || []) {
+      for (const f of fechas) {
+        if (f >= b.checkIn && f < b.checkOut) set.add(f);
       }
     }
-    return { fechas: fechasArr, ocupacion: porHab };
-  }, [habitaciones, reservas, dias]);
+    ocupadasPorHab.set(fila.habitacionId, set);
+  }
+
+  const fechaDeColumna = (col) => (col >= 1 && col <= noches ? fechas[col - 1] : null);
+
+  return {
+    filas,
+    fechas,
+    noches,
+    desde,
+    fechaDeColumna,
+    columnaDeFecha(f) {
+      const i = fechas.indexOf(f);
+      return i === -1 ? -1 : i + 1;
+    },
+    estaOcupada(fila, col) {
+      const f = fechaDeColumna(col);
+      if (!f) return false;
+      const habId = filas[fila]?.habitacionId;
+      return ocupadasPorHab.get(habId)?.has(f) ?? false;
+    },
+    bloqueEn(fila, col) {
+      const f = fechaDeColumna(col);
+      if (!f) return null;
+      return (filas[fila]?.bloques || []).find((b) => b.checkIn <= f && f < b.checkOut) || null;
+    },
+    bloqueSalidaEn(fila, col) {
+      const f = fechaDeColumna(col);
+      if (!f) return null;
+      return (filas[fila]?.bloques || []).find((b) => b.checkOut === f) || null;
+    },
+    habitacionDeFila(fila) {
+      return filas[fila]?.habitacion || null;
+    },
+    bloquesDeFila(fila) {
+      return filas[fila]?.bloques || [];
+    },
+  };
+}
+
+function esCompatibleFila(m, fila, bloque) {
+  const hab = m.habitacionDeFila(fila);
+  if (!hab || hab.id == null) return true;
+  const bloques = m.bloquesDeFila(fila);
+  if (
+    bloques.some(
+      (b) => b.reservaId !== bloque.reservaId && b.checkIn < bloque.checkOut && bloque.checkIn < b.checkOut,
+    )
+  ) {
+    return false;
+  }
+  if (bloque.personas > hab.capacidad + hab.colchones) return false;
+  if (bloque.lateCheckout && bloques.some((b) => b.checkIn === bloque.checkOut)) return false;
+  if (!hab.limpia && bloques.some((b) => b.lateCheckout && b.checkOut === bloque.checkIn)) return false;
+  return true;
+}
+
+function bloqueEnPunto(m, fila, col, e, td) {
+  if (fila < 0 || col < 1 || col > m.noches || !td) return null;
+  const rect = td.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (y < MARGEN_VERTICAL || y > rect.height - MARGEN_VERTICAL) return null;
+  const f = m.fechaDeColumna(col);
+  const ancho = rect.width;
+  const head = m.bloqueEn(fila, col);
+  if (head && contieneBarra(segmento(head, f), ancho, x)) return head;
+  const tail = m.bloqueSalidaEn(fila, col);
+  if (tail && contieneBarra(segmento(tail, f), ancho, x)) return tail;
+  return null;
+}
+
+function rangoDeColumnas(m, cIni, cFin) {
+  const primera = Math.max(1, Math.min(cIni, cFin));
+  const ultima = Math.min(m.noches, Math.max(cIni, cFin));
+  if (primera >= ultima) return null;
+  return { checkIn: m.fechaDeColumna(primera), checkOut: m.fechaDeColumna(ultima) };
+}
+
+function esRangoLibre(m, fila, cIni, cFin) {
+  if (!rangoDeColumnas(m, cIni, cFin)) return false;
+  const primera = Math.max(1, Math.min(cIni, cFin));
+  const ultima = Math.min(m.noches, Math.max(cIni, cFin));
+  for (let col = primera; col < ultima; col++) {
+    if (m.estaOcupada(fila, col)) return false;
+  }
+  return true;
+}
+
+function filaDeEvento(e) {
+  const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
+  return td ? Number(td.dataset.fila) : -1;
+}
+
+function columnaDeEvento(e) {
+  const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
+  return td ? Number(td.dataset.col) : -1;
+}
+
+function limpiarInteraccion(est) {
+  const sel = {
+    haySeleccion: est.haySeleccion,
+    filaSeleccionada: est.filaSeleccionada,
+    reservaSeleccionadaId: est.reservaSeleccionadaId,
+    bloqueSeleccionado: est.bloqueSeleccionado,
+  };
+  Object.assign(est, nuevoEstado());
+  Object.assign(est, sel);
+}
+
+function limpiarSeleccion(est) {
+  est.haySeleccion = false;
+  est.filaSeleccionada = -1;
+  est.reservaSeleccionadaId = null;
+  est.bloqueSeleccionado = null;
+  if (est.tipo === 'redimension') limpiarInteraccion(est);
+}
+
+function iniciarRango(est, fila, columna, ultimaColumna) {
+  est.tipo = 'rango';
+  est.filaOrigen = fila;
+  est.colIni = columna;
+  est.colFin = columna;
+  est.ultimaColumna = ultimaColumna;
+  est.filaHover = -1;
+  est.bloqueOrigen = null;
+  est.reservaOrigenId = null;
+  est.rangoExtendido = false;
+}
+
+function iniciarMovimiento(est, m, fila, columna, bloque) {
+  if (!bloque || bloque.reservaId == null) {
+    limpiarInteraccion(est);
+    return;
+  }
+  const hab = m.habitacionDeFila(fila);
+  if (!hab || hab.id == null || !bloque.checkIn) {
+    limpiarInteraccion(est);
+    return;
+  }
+  limpiarSeleccion(est);
+  est.tipo = 'movimiento';
+  est.filaOrigen = fila;
+  est.colIni = columna;
+  est.colFin = columna;
+  est.filaHover = fila;
+  est.filaDestino = -1;
+  est.bloqueOrigen = bloque;
+  est.reservaOrigenId = bloque.reservaId;
+  est.compatiblePorFila = m.filas.map((_, idx) => esCompatibleFila(m, idx, bloque));
+}
+
+function seleccionarReserva(est, fila, bloque) {
+  if (!bloque || !bloque.checkIn || !bloque.checkOut) {
+    limpiarSeleccion(est);
+    return;
+  }
+  est.haySeleccion = true;
+  est.filaSeleccionada = fila;
+  est.reservaSeleccionadaId = bloque.reservaId;
+  est.bloqueSeleccionado = bloque;
+}
+
+function celdaInfo(m, est, fila, col, fecha) {
+  const enMovimiento = est.tipo === 'movimiento';
+  const enRedimension = est.tipo === 'redimension';
+  const esOrigen = enMovimiento && fila === est.filaOrigen;
+  const gris = enMovimiento && !esOrigen && !est.compatiblePorFila[fila];
+  const seleccionRango = esCeldaSeleccionada(est, fila, col);
+
+  let clase = 'cal-celda-limpia';
+  if (seleccionRango) {
+    clase = 'cal-celda-seleccion';
+  } else if (gris) {
+    clase = 'cal-celda-gris';
+  } else {
+    const hab = m.habitacionDeFila(fila);
+    clase = hab && hab.limpia === false ? 'cal-celda-sucia' : 'cal-celda-limpia';
+  }
+
+  let ignorar = null;
+  if (enMovimiento && fila === est.filaOrigen && ocultarBloqueOrigen(est)) {
+    ignorar = est.reservaOrigenId;
+  } else if (enRedimension && fila === est.filaSeleccionada) {
+    ignorar = est.reservaSeleccionadaId;
+  }
+
+  const segments = [];
+  const bloques = m.bloquesDeFila(fila);
+  const tail = bloques.find((b) => b.reservaId !== ignorar && b.checkOut === fecha);
+  if (tail) {
+    const seg = segmento(tail, fecha);
+    if (seg) segments.push({ ...seg, clase: gris ? 'barra barra-gris' : 'barra' });
+  }
+  const head = bloques.find((b) => b.reservaId !== ignorar && b.checkIn <= fecha && fecha < b.checkOut);
+  if (head) {
+    const seg = segmento(head, fecha);
+    if (seg) segments.push({ ...seg, clase: gris ? 'barra barra-gris' : 'barra' });
+  }
+
+  if (enMovimiento && fila === est.filaDestino && est.filaDestino !== est.filaOrigen && est.bloqueOrigen) {
+    const seg = segmento(est.bloqueOrigen, fecha);
+    if (seg) segments.push({ ...seg, clase: 'barra barra-preview' });
+  }
+  if (enRedimension && fila === est.filaSeleccionada && est.inicioRedimension && est.finRedimension && est.bloqueSeleccionado) {
+    const seg = segmento(
+      { checkIn: est.inicioRedimension, checkOut: est.finRedimension, lateCheckout: est.bloqueSeleccionado.lateCheckout },
+      fecha,
+    );
+    if (seg) segments.push({ ...seg, clase: 'barra barra-preview' });
+  }
+  if (est.tipo === 'rango' && est.rangoExtendido && esCeldaSeleccionada(est, fila, col)) {
+    const sIni = seleccionIni(est);
+    const sFin = seleccionFin(est);
+    const fIni = m.fechaDeColumna(sIni);
+    const fFin = m.fechaDeColumna(sFin);
+    if (fIni && fFin) {
+      const seg = segmento({ checkIn: fIni, checkOut: fFin, lateCheckout: false }, fecha);
+      if (seg) segments.push({ ...seg, clase: 'barra barra-fantasma' });
+    }
+  }
+
+  return { clase, segments };
+}
+
+export default function Calendario({ habitaciones, onNuevaPrecargada, onCambio, refreshSignal = 0 }) {
+  const contRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [fechaInicio, setFechaInicio] = useState(() => fechaISO(new Date()));
+  const [fechaInput, setFechaInput] = useState(() => formatearDMA(fechaISO(new Date())));
+  const [modelo, setModelo] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState('');
+  const [aviso, setAviso] = useState(null);
+  const [, setTick] = useState(0);
+  const estadoRef = useRef(nuevoEstado());
+  const modeloRef = useRef(null);
+  const render = useCallback(() => setTick((t) => t + 1), []);
+
+  const noches = containerWidth > 0 ? nochesVisibles(containerWidth) : NOCHES_POR_DEFECTO;
+
+  const recargar = useCallback(async () => {
+    const desde = fechaInicio;
+    const hasta = sumarDias(fechaInicio, noches);
+    setCargando(true);
+    setErrorCarga('');
+    try {
+      const data = await api.calendario(desde, hasta);
+      const m = construirModelo(data, habitaciones, desde, noches);
+      modeloRef.current = m;
+      setModelo(m);
+      estadoRef.current = nuevoEstado();
+      render();
+    } catch (err) {
+      setErrorCarga(err.message);
+    } finally {
+      setCargando(false);
+    }
+  }, [fechaInicio, noches, habitaciones, render]);
+
+  useEffect(() => {
+    recargar();
+  }, [recargar, refreshSignal]);
+
+  const recargarRef = useRef(recargar);
+  useEffect(() => {
+    recargarRef.current = recargar;
+  }, [recargar]);
+
+  const onNuevaRef = useRef(onNuevaPrecargada);
+  useEffect(() => {
+    onNuevaRef.current = onNuevaPrecargada;
+  }, [onNuevaPrecargada]);
+
+  const onCambioRef = useRef(onCambio);
+  useEffect(() => {
+    onCambioRef.current = onCambio;
+  }, [onCambio]);
+
+  useEffect(() => {
+    const el = contRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver((entries) => {
+      setContainerWidth(entries[0]?.contentRect?.width ?? 0);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  function iniciarRedimension(handle, e, est) {
+    const borde = handle.dataset.borde;
+    const direccion = handle.dataset.direccion;
+    if (!est.haySeleccion || !est.bloqueSeleccionado) return;
+    const placa = handle.closest('[data-placa]');
+    const td = handle.closest('td[data-col]');
+    const rect = placa ? placa.getBoundingClientRect() : null;
+    const tdRect = td ? td.getBoundingClientRect() : null;
+    let bordeX = e.clientX;
+    if (rect) bordeX = borde === 'inicio' ? rect.left : rect.right;
+    est.tipo = 'redimension';
+    est.bordeRedimension = borde;
+    est.direccionRedimension = direccion;
+    est.inicioRedimension = est.bloqueSeleccionado.checkIn;
+    est.finRedimension = est.bloqueSeleccionado.checkOut;
+    est.resizeBordeX = bordeX;
+    est.resizeAnchoCelda = tdRect ? tdRect.width : ANCHO_NOCHE_MIN;
+    est.presionPendiente = false;
+    est.bloquePresion = null;
+    render();
+  }
+
+  function actualizarRedimension(e, m, est) {
+    if (est.tipo !== 'redimension' || !est.bloqueSeleccionado) return;
+    const fila = est.filaSeleccionada;
+    const ultima = m.noches;
+    const deltaX = e.clientX - est.resizeBordeX;
+    const dias = diasRedimension(deltaX, est.resizeAnchoCelda, est.bordeRedimension);
+    let ini = est.bloqueSeleccionado.checkIn;
+    let fin = est.bloqueSeleccionado.checkOut;
+    const nochesEstadia = diasEntre(ini, fin);
+
+    if (est.bordeRedimension === 'inicio') {
+      if (dias > 0) {
+        let max = 0;
+        while (max < dias) {
+          const noche = sumarDias(ini, -(max + 1));
+          const col = m.columnaDeFecha(noche);
+          if (col < 1 || col > ultima || m.estaOcupada(fila, col)) break;
+          max++;
+        }
+        ini = sumarDias(ini, -max);
+      } else if (dias < 0) {
+        const max = Math.max(0, nochesEstadia - 1);
+        ini = sumarDias(ini, Math.min(-dias, max));
+      }
+    } else if (dias > 0) {
+      let max = 0;
+      while (max < dias) {
+        const noche = sumarDias(fin, max);
+        const col = m.columnaDeFecha(noche);
+        if (col < 1 || col > ultima || m.estaOcupada(fila, col)) break;
+        max++;
+      }
+      fin = sumarDias(fin, max);
+    } else if (dias < 0) {
+      const max = Math.max(0, nochesEstadia - 1);
+      fin = sumarDias(fin, -Math.min(-dias, max));
+    }
+
+    if (ini < fin) {
+      est.inicioRedimension = ini;
+      est.finRedimension = fin;
+      render();
+    }
+  }
+
+  function extenderRango(e, m, est) {
+    const fila = filaDeEvento(e);
+    if (fila !== est.filaOrigen) return;
+    const columna = Math.max(1, Math.min(m.noches, columnaDeEvento(e)));
+    if (columna !== est.colFin) {
+      est.colFin = columna;
+      est.rangoExtendido = columna !== est.colIni;
+      render();
+    }
+  }
+
+  async function finalizarRango(m, est) {
+    if (!est.rangoExtendido) {
+      limpiarInteraccion(est);
+      render();
+      return;
+    }
+    const fila = est.filaOrigen;
+    const cIni = seleccionIni(est);
+    const cFin = seleccionFin(est);
+    if (fila < 0 || cIni < 0 || cFin < 0) {
+      limpiarInteraccion(est);
+      render();
+      return;
+    }
+    const rango = rangoDeColumnas(m, cIni, cFin);
+    if (!rango) {
+      limpiarInteraccion(est);
+      render();
+      return;
+    }
+    if (!esRangoLibre(m, fila, cIni, cFin)) {
+      limpiarInteraccion(est);
+      setAviso({ tipo: 'error', titulo: 'Selección no válida', mensaje: 'El rango cruza una noche ocupada. Elegí noches libres.' });
+      render();
+      return;
+    }
+    const hab = m.habitacionDeFila(fila);
+    if (!hab || hab.id == null) {
+      limpiarInteraccion(est);
+      render();
+      return;
+    }
+    try {
+      const resp = await api.lateCheckout(hab.id, rango.checkIn);
+      if (resp && resp.hayLateCheckout) {
+        setAviso({
+          tipo: 'info',
+          mensaje: 'La habitación tiene un late check-out el día del check-in. Coordiná la limpieza antes del ingreso.',
+        });
+      }
+    } catch {
+      /* aviso best-effort */
+    }
+    limpiarInteraccion(est);
+    render();
+    if (onNuevaRef.current) {
+      onNuevaRef.current({ habitacionId: hab.id, checkIn: rango.checkIn, checkOut: rango.checkOut });
+    }
+  }
+
+  async function finalizarMovimiento(m, est) {
+    const filaOrigen = est.filaOrigen;
+    const filaDestino = est.filaDestino;
+    const reservaId = est.reservaOrigenId;
+    const origen = m.habitacionDeFila(filaOrigen)?.id;
+    const noche = est.bloqueOrigen?.checkIn;
+    limpiarInteraccion(est);
+    render();
+    if (reservaId == null || origen == null || noche == null) return;
+    if (filaDestino < 0 || filaDestino === filaOrigen) return;
+    const destino = m.habitacionDeFila(filaDestino);
+    if (!destino || destino.id == null) return;
+    try {
+      await api.moverReserva(reservaId, {
+        habitacionOrigenId: origen,
+        noche,
+        habitacionDestinoId: destino.id,
+      });
+      await recargarRef.current();
+      if (onCambioRef.current) onCambioRef.current();
+    } catch (err) {
+      setAviso({
+        tipo: 'error',
+        titulo: 'No se pudo mover',
+        mensaje: err.mensaje || err.message,
+        motivo: err.motivo,
+        detalle: err.detalle,
+      });
+    }
+  }
+
+  async function finalizarRedimension(m, est) {
+    const original = est.bloqueSeleccionado;
+    const nuevoInicio = est.inicioRedimension;
+    const nuevoFin = est.finRedimension;
+    const fila = est.filaSeleccionada;
+    const reservaId = est.reservaSeleccionadaId;
+    const hab = fila >= 0 ? m.habitacionDeFila(fila) : null;
+    const noche = original?.checkIn;
+
+    est.tipo = 'ninguno';
+    est.bordeRedimension = null;
+    est.direccionRedimension = null;
+    est.inicioRedimension = null;
+    est.finRedimension = null;
+    est.resizeBordeX = 0;
+    est.resizeAnchoCelda = 0;
+    render();
+
+    const cambio =
+      original &&
+      nuevoInicio &&
+      nuevoFin &&
+      (nuevoInicio !== original.checkIn || nuevoFin !== original.checkOut);
+    if (!cambio || reservaId == null || !hab || hab.id == null || !noche) return;
+
+    try {
+      await api.redimensionarReserva(reservaId, {
+        habitacionId: hab.id,
+        noche,
+        nuevoCheckIn: nuevoInicio,
+        nuevoCheckOut: nuevoFin,
+      });
+      await recargarRef.current();
+      if (onCambioRef.current) onCambioRef.current();
+    } catch (err) {
+      setAviso({ tipo: 'error', titulo: 'Error', mensaje: err.message });
+      await recargarRef.current();
+    }
+  }
+
+  function manejarPointerDown(e) {
+    if (e.button !== 0) return;
+    const m = modeloRef.current;
+    if (!m) return;
+    const est = estadoRef.current;
+
+    const handle = e.target && e.target.closest ? e.target.closest('[data-handle]') : null;
+    if (handle && est.haySeleccion && est.tipo !== 'redimension') {
+      iniciarRedimension(handle, e, est);
+      e.preventDefault();
+      return;
+    }
+
+    const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
+    const fila = td ? Number(td.dataset.fila) : -1;
+    const columna = td ? Number(td.dataset.col) : -1;
+
+    if (fila < 0 || columna <= 0) {
+      limpiarSeleccion(est);
+      render();
+      return;
+    }
+
+    const bloque = bloqueEnPunto(m, fila, columna, e, td);
+
+    if (est.haySeleccion) {
+      if (esElBloqueSeleccionado(est, bloque, fila)) {
+        est.presionPendiente = true;
+        est.filaPresion = fila;
+        est.columnaPresion = columna;
+        est.puntoPresion = { x: e.clientX, y: e.clientY };
+        est.bloquePresion = bloque;
+        render();
+        return;
+      }
+      limpiarSeleccion(est);
+      render();
+      return;
+    }
+
+    if (bloque) {
+      est.presionPendiente = true;
+      est.filaPresion = fila;
+      est.columnaPresion = columna;
+      est.puntoPresion = { x: e.clientX, y: e.clientY };
+      est.bloquePresion = bloque;
+      render();
+      return;
+    }
+
+    if (m.estaOcupada(fila, columna)) {
+      limpiarInteraccion(est);
+      render();
+      return;
+    }
+
+    limpiarInteraccion(est);
+    iniciarRango(est, fila, columna, m.noches);
+    render();
+    e.preventDefault();
+  }
+
+  function manejarMove(e) {
+    const m = modeloRef.current;
+    if (!m) return;
+    const est = estadoRef.current;
+
+    if (est.tipo === 'redimension') {
+      actualizarRedimension(e, m, est);
+      return;
+    }
+    if (est.tipo === 'movimiento') {
+      est.filaHover = filaDeEvento(e);
+      est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila);
+      render();
+      return;
+    }
+    if (est.presionPendiente) {
+      if (!est.puntoPresion) return;
+      const dist = Math.hypot(e.clientX - est.puntoPresion.x, e.clientY - est.puntoPresion.y);
+      if (dist < UMBRAL_ARRASTRE_PX) return;
+      est.presionPendiente = false;
+      const fila = est.filaPresion;
+      const columna = est.columnaPresion;
+      const bloque = est.bloquePresion;
+      est.bloquePresion = null;
+      iniciarMovimiento(est, m, fila, columna, bloque);
+      est.filaHover = filaDeEvento(e);
+      est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila);
+      render();
+      return;
+    }
+    if (est.tipo === 'rango') {
+      extenderRango(e, m, est);
+    }
+  }
+
+  function manejarUp() {
+    const m = modeloRef.current;
+    if (!m) return;
+    const est = estadoRef.current;
+
+    if (est.tipo === 'redimension') {
+      finalizarRedimension(m, est);
+      return;
+    }
+    if (est.presionPendiente) {
+      est.presionPendiente = false;
+      const bloque = est.bloquePresion;
+      const fila = est.filaPresion;
+      est.bloquePresion = null;
+      if (bloque && !est.haySeleccion) {
+        seleccionarReserva(est, fila, bloque);
+      }
+      render();
+      return;
+    }
+    if (est.tipo === 'ninguno') return;
+    if (est.tipo === 'movimiento') {
+      finalizarMovimiento(m, est);
+      return;
+    }
+    finalizarRango(m, est);
+  }
+
+  useEffect(() => {
+    const move = (e) => manejarMove(e);
+    const up = () => manejarUp();
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, []);
+
+  function aplicarFecha() {
+    const iso = parseDMA(fechaInput);
+    if (!iso) {
+      setAviso({ tipo: 'error', mensaje: 'Fecha inválida. Usá dd/MM/yyyy.' });
+      return;
+    }
+    setAviso(null);
+    setFechaInput(formatearDMA(iso));
+    setFechaInicio(iso);
+  }
+
+  const est = estadoRef.current;
+  const m = modelo;
+
+  const anchoTotal = containerWidth > 0 ? containerWidth : ANCHO_HABITACION + noches * ANCHO_NOCHE_MIN;
+  const anchoNocheCalc = anchoNoche(anchoTotal, noches);
+  const resto = Math.max(0, anchoTotal - ANCHO_HABITACION - noches * anchoNocheCalc);
+  const anchoCol = (col) => (col === 0 ? ANCHO_HABITACION : anchoNocheCalc + (col - 1 < resto ? 1 : 0));
+  const totalWidth = m
+    ? ANCHO_HABITACION + m.fechas.reduce((acc, _f, i) => acc + anchoCol(i + 1), 0)
+    : ANCHO_HABITACION + noches * ANCHO_NOCHE_MIN;
+
+  function renderHandle(borde, pos) {
+    const izqDir = borde === 'inicio' ? 'alargar' : 'acortar';
+    const derDir = borde === 'inicio' ? 'acortar' : 'alargar';
+    return (
+      <span className="handle-placa" data-placa data-borde={borde} style={{ left: pos.left, width: pos.width }}>
+        <span className="handle-flecha hacia-izq" data-handle data-borde={borde} data-direccion={izqDir} />
+        <span className="handle-flecha hacia-der" data-handle data-borde={borde} data-direccion={derDir} />
+      </span>
+    );
+  }
+
+  function renderCelda(fila, col, fecha) {
+    const info = celdaInfo(m, est, fila, col, fecha);
+    const ancho = anchoCol(col);
+    let handleInicio = null;
+    let handleFin = null;
+
+    if (est.haySeleccion && est.tipo !== 'redimension' && fila === est.filaSeleccionada && est.bloqueSeleccionado) {
+      const sel = est.bloqueSeleccionado;
+      const colIni = m.columnaDeFecha(sel.checkIn);
+      const colFin = m.columnaDeFecha(sel.checkOut);
+      if (col === colIni && colIni >= 1 && colIni <= m.noches) {
+        const seg = segmento(sel, fecha);
+        const [x0] = pixeles(seg, ancho);
+        handleInicio = { left: x0, width: Math.min(ANCHO_PLACA, ancho - x0) };
+      }
+      if (col === colFin && colFin >= 1 && colFin <= m.noches) {
+        const seg = segmento(sel, fecha);
+        const [, x1] = pixeles(seg, ancho);
+        const w = Math.min(ANCHO_PLACA, x1);
+        handleFin = { left: x1 - w, width: w };
+      }
+    }
+
+    return (
+      <td key={fecha} className={`cal-celda ${info.clase}`} data-col={col} data-fila={fila} style={{ width: ancho }}>
+        {info.segments.map((s, i) => {
+          const [x0, x1] = pixeles(s, ancho);
+          return <span key={i} className={s.clase} style={{ left: x0, width: Math.max(0, x1 - x0) }} />;
+        })}
+        {handleInicio && renderHandle('inicio', handleInicio)}
+        {handleFin && renderHandle('fin', handleFin)}
+      </td>
+    );
+  }
 
   return (
-    <div className="calendario-scroll">
-      <table className="calendario">
-        <thead>
-          <tr>
-            <th className="sticky-col">Hab.</th>
-            {fechas.map((f) => (
-              <th key={f}>{formatear(f)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {habitaciones.map((h) => (
-            <tr key={h.id}>
-              <td className="sticky-col">{h.numero}</td>
-              {fechas.map((f) => {
-                const ocupada = ocupacion.get(h.numero)?.has(f);
-                return <td key={f} className={ocupada ? 'ocupada' : 'libre'} />;
+    <div className="calendario-contenedor">
+      <div className="calendario-toolbar">
+        <label className="cal-inicio-label" htmlFor="cal-inicio">
+          Inicio:
+        </label>
+        <input
+          id="cal-inicio"
+          className="cal-fecha"
+          value={fechaInput}
+          onChange={(e) => setFechaInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') aplicarFecha();
+          }}
+          placeholder="dd/MM/yyyy"
+        />
+        <button type="button" className="cal-refrescar" onClick={aplicarFecha} title="Refrescar">
+          ↻
+        </button>
+        <div className="cal-leyenda">
+          <span className="chip cal-libre-chip">Libre</span>
+          <span className="chip cal-sucia-chip">Sucia</span>
+          <span className="chip cal-barra-chip">Ocupada</span>
+        </div>
+      </div>
+
+      {aviso && (
+        <div className={`cal-aviso cal-aviso-${aviso.tipo}`}>
+          <div className="cal-aviso-texto">
+            {aviso.titulo && <strong>{aviso.titulo}: </strong>}
+            {aviso.mensaje}
+            {aviso.motivo && <span className="cal-aviso-motivo"> ({aviso.motivo})</span>}
+            {aviso.detalle && <div className="cal-aviso-detalle">{aviso.detalle}</div>}
+          </div>
+          <button type="button" className="cal-aviso-cerrar" onClick={() => setAviso(null)} aria-label="Cerrar">
+            ×
+          </button>
+        </div>
+      )}
+
+      {errorCarga && <div className="error banner">{errorCarga}</div>}
+      {cargando && !m && <div className="cargando">Cargando calendario…</div>}
+
+      <div className="calendario-scroll" ref={contRef} onPointerDown={manejarPointerDown}>
+        {m && (
+          <table className="calendario" style={{ width: totalWidth }}>
+            <colgroup>
+              <col style={{ width: ANCHO_HABITACION }} />
+              {m.fechas.map((f, i) => (
+                <col key={f} style={{ width: anchoCol(i + 1) }} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="cal-sticky cal-sticky-head">Hab.</th>
+                {m.fechas.map((f) => (
+                  <th key={f}>{formatearDia(f)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {m.filas.map((fila, filaIdx) => {
+                const grisFila =
+                  est.tipo === 'movimiento' && filaIdx !== est.filaOrigen && !est.compatiblePorFila[filaIdx];
+                return (
+                  <tr key={fila.habitacionId}>
+                    <td
+                      className={`cal-sticky cal-habitacion${grisFila ? ' cal-celda-gris' : ''}`}
+                      data-col="0"
+                      data-fila={filaIdx}
+                    >
+                      {fila.numero}
+                    </td>
+                    {m.fechas.map((f, colIdx) => renderCelda(filaIdx, colIdx + 1, f))}
+                  </tr>
+                );
               })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="leyenda">
-        <span className="chip libre-chip">Libre</span>
-        <span className="chip ocupada-chip">Ocupada</span>
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

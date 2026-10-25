@@ -39,4 +39,34 @@ export const api = {
 
   editarReserva: (id, payload) =>
     request(`/reservas/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  calendario: (desde, hasta) =>
+    request(`/calendario?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
+
+  lateCheckout: (habitacionId, dia) =>
+    request(`/calendario/late-checkout?habitacionId=${habitacionId}&dia=${encodeURIComponent(dia)}`),
+
+  redimensionarReserva: (id, payload) =>
+    request(`/reservas/${id}/redimensionar`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  moverReserva: async (id, payload) => {
+    const res = await fetch(`${BASE}/reservas/${id}/mover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) return res.json();
+    let body = {};
+    try {
+      body = await res.json();
+    } catch {
+      /* ignore non-json body */
+    }
+    const err = new Error(body.mensaje || `Error ${res.status}`);
+    err.status = res.status;
+    err.mensaje = body.mensaje || err.message;
+    err.motivo = body.motivo || '';
+    err.detalle = body.detalle || '';
+    throw err;
+  },
 };

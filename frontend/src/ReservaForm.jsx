@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 
-export default function ReservaForm({ titulares, habitaciones, reserva, onCancelar, onGuardado }) {
+export default function ReservaForm({ titulares, habitaciones, reserva, precarga, onCancelar, onGuardado }) {
   const esEdicion = Boolean(reserva);
   const [forma, setForma] = useState({
     titularId: reserva?.titularId ?? '',
-    habitacionId: reserva?.numerosHabitacion[0] ? '' : '',
-    checkIn: reserva?.checkIn ?? '',
-    checkOut: reserva?.checkOut ?? '',
+    habitacionId: reserva ? '' : (precarga?.habitacionId ?? ''),
+    checkIn: reserva?.checkIn ?? precarga?.checkIn ?? '',
+    checkOut: reserva?.checkOut ?? precarga?.checkOut ?? '',
     camasMatrimoniales: 1,
     camasIndividuales: 0,
     cunas: 0,
