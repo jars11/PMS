@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import CamposTitular from './CamposTitular';
+import { useTitular } from './useTitular';
 
 export default function ReservaForm({ titulares, habitaciones, reserva, precarga, onCancelar, onGuardado }) {
   const esEdicion = Boolean(reserva);
   const [forma, setForma] = useState({
-    titularId: reserva?.titularId ?? '',
     habitacionId: reserva ? (reserva.habitacionId ?? '') : (precarga?.habitacionId ?? ''),
     checkIn: reserva?.checkIn ?? precarga?.checkIn ?? '',
     checkOut: reserva?.checkOut ?? precarga?.checkOut ?? '',
@@ -14,20 +15,32 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
   });
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
+  // Flujo documento → autocompletar/crear titular (CamposTitular). En alta el
+  // documento arranca vacío; al editar se precarga el titular de la reserva
+  // (la edición desde el calendario trae titularId; la de la lista, solo el
+  // nombre, así que se resuelve por nombre como fallback).
+  const titularInicial = useMemo(() => {
+    if (!reserva) return null;
+    const porId =
+      reserva.titularId == null
+        ? null
+        : titulares.find((t) => String(t.id) === String(reserva.titularId));
+    return porId ?? titulares.find((t) => t.nombre === reserva.titular) ?? null;
+  }, [reserva, titulares]);
+  const titular = useTitular(titularInicial);
 
-  // Seed the titular/room when data loads (create) or when editing a reservation.
+  // Seed the room when editing a reservation.
   useEffect(() => {
     setForma((f) => {
-      const titularId = !f.titularId && titulares.length > 0 ? titulares[0].id : f.titularId;
       if (reserva) {
-        // La edicion desde el calendario ya trae habitacionId; la de la lista,
-        // solo el numero, asi que se resuelve por numero como fallback.
+        // La edición desde el calendario ya trae habitacionId; la de la lista,
+        // solo el número, así que se resuelve por número como fallback.
         const hab =
           reserva.habitacionId != null
             ? null
             : habitaciones.find((h) => h.numero === reserva.numerosHabitacion?.[0]);
         return {
-          titularId,
+          ...f,
           habitacionId: reserva.habitacionId ?? (hab ? hab.id : ''),
           checkIn: reserva.checkIn,
           checkOut: reserva.checkOut,
@@ -37,9 +50,9 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
           lateCheckout: reserva.lateCheckout ?? false,
         };
       }
-      return { ...f, titularId };
+      return f;
     });
-  }, [reserva, habitaciones, titulares]);
+  }, [reserva, habitaciones]);
 
   function set(key, val) {
     setForma((f) => ({ ...f, [key]: val }));
@@ -53,16 +66,19 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
           e.preventDefault();
           setError('');
           setCargando(true);
-          const payload = {
-            titularId: Number(forma.titularId),
-            habitacionId: Number(forma.habitacionId),
-            checkIn: forma.checkIn,
-            checkOut: forma.checkOut,
-            camasMatrimoniales: Number(forma.camasMatrimoniales),
-            camasIndividuales: Number(forma.camasIndividuales),
-            cunas: Number(forma.cunas),
-          };
           try {
+            // Sin titular existente, esto busca el documento y da de alta el
+            // titular nuevo (POST /api/titulares) antes de crear la reserva.
+            const titularId = await titular.resolverTitularId();
+            const payload = {
+              titularId,
+              habitacionId: Number(forma.habitacionId),
+              checkIn: forma.checkIn,
+              checkOut: forma.checkOut,
+              camasMatrimoniales: Number(forma.camasMatrimoniales),
+              camasIndividuales: Number(forma.camasIndividuales),
+              cunas: Number(forma.cunas),
+            };
             await onGuardado(reserva, payload, forma.lateCheckout);
           } catch (err) {
             setError(err.message);
@@ -72,16 +88,11 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
       >
         <h2>{esEdicion ? 'Editar reserva' : 'Nueva reserva'}</h2>
 
-        <label>
-          Titular
-          <select value={forma.titularId} onChange={(e) => set('titularId', e.target.value)}>
-            {titulares.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CamposTitular
+          titular={titular}
+          titulares={titulares}
+          autoFocusDocumento={!esEdicion}
+        />
 
         <label>
           Habitación

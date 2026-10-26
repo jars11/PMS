@@ -51,6 +51,7 @@ class ApiRestTest {
                 .standaloneSetup(
                         new AuthController(new AuthService()),
                         new CatalogoController(),
+                        new TitularesController(),
                         new ReservasController())
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(
@@ -221,6 +222,35 @@ class ApiRestTest {
                         .content(jsonReserva(titular.getId(), idHabitacion(103),
                                 "2026-11-01", "2026-11-04", 1, 1, 0)))
                 .andExpect(status().isNotFound());
+    }
+
+    // --------------------------------------- titular con documento (T12d)
+
+    @Test
+    void crearReservaConTitularNuevoPorDocumentoUsaEseTitular() throws Exception {
+        String creado = mockMvc.perform(post("/api/titulares")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombres\":[\"Maria\"],\"apellidos\":[\"Lopez\"],"
+                                + "\"numeroDocumento\":\"41234567\",\"tipoDocumento\":\"CEDULA\","
+                                + "\"celular\":\"091111111\",\"telefonoFijo\":\"22000000\","
+                                + "\"email\":\"maria@example.com\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.numeroDocumento").value("41234567"))
+                .andReturn().getResponse().getContentAsString();
+        long nuevoTitularId = extraerId(creado);
+
+        mockMvc.perform(post("/api/reservas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonReserva(nuevoTitularId, idHabitacion(103),
+                                "2026-12-01", "2026-12-04", 1, 1, 0)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.titular").value("Maria Lopez"));
+
+        // El titular de esa reserva quedo registrado con su documento.
+        mockMvc.perform(get("/api/titulares/buscar").param("documento", "41234567"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(nuevoTitularId))
+                .andExpect(jsonPath("$.nombre").value("Maria Lopez"));
     }
 
     /** Extrae el id numerico del JSON de una reserva creada (campo "id"). */

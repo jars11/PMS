@@ -58,6 +58,14 @@ export default function App() {
     }
   }, []);
 
+  const refrescarTitulares = useCallback(async () => {
+    try {
+      setTitulares(await api.titulares());
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
   function salir() {
     localStorage.removeItem('pms.sesion');
     setSesion(null);
@@ -92,7 +100,9 @@ export default function App() {
     setFormAbierto(false);
     setReservaEnEdicion(null);
     setPrecarga(null);
-    await refrescarReservas();
+    // El formulario puede haber dado de alta un titular nuevo (documento →
+    // alta): se refresca la lista para el selector y las ediciones siguientes.
+    await Promise.all([refrescarReservas(), refrescarTitulares()]);
     setCalendarioVersion((v) => v + 1);
   }
 
@@ -159,6 +169,8 @@ export default function App() {
               onPrevisualizar={setPrevisualizacion}
               onCreada={() => {
                 refrescarReservas();
+                // La propuesta puede haber dado de alta un titular nuevo.
+                refrescarTitulares();
                 setCalendarioVersion((v) => v + 1);
               }}
             />

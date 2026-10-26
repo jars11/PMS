@@ -47,6 +47,15 @@ public class RepositorioPersonas {
                         .getResultList().stream().findFirst().orElse(null));
     }
 
+    /** Titular whose document matches exactly (lowest id first), or null. */
+    public TitularReserva findTitularPorDocumento(String numeroDocumento) {
+        return JpaUtil.enTransaccion(em ->
+                em.createQuery("select t from TitularReserva t where t.numeroDocumento = :doc order by t.id",
+                                TitularReserva.class)
+                        .setParameter("doc", numeroDocumento)
+                        .getResultList().stream().findFirst().orElse(null));
+    }
+
     /** All persons. */
     public List<Persona> findAll() {
         return JpaUtil.enTransaccion(em -> em.createQuery("select p from Persona p", Persona.class).getResultList());

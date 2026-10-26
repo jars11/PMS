@@ -10,7 +10,9 @@ async function request(path, options = {}) {
   });
 
   if (res.status === 401) {
-    throw new Error('Credenciales inválidas');
+    const err = new Error('Credenciales inválidas');
+    err.status = 401;
+    throw err;
   }
   if (!res.ok) {
     let msg = `Error ${res.status}`;
@@ -20,7 +22,9 @@ async function request(path, options = {}) {
     } catch {
       /* ignore non-json body */
     }
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -33,6 +37,26 @@ export const api = {
   habitaciones: () => request('/habitaciones'),
   titulares: () => request('/titulares'),
   reservas: () => request('/reservas'),
+
+  /**
+   * Alta de titular: `{nombres:[], apellidos:[], numeroDocumento, tipoDocumento,
+   * celular, telefonoFijo, email}` → `TitularVistaDto` con su `id` y documento.
+   */
+  crearTitular: (datos) =>
+    request('/titulares', { method: 'POST', body: JSON.stringify(datos) }),
+
+  /**
+   * Titular registrado con ese documento, o `null` cuando todavía no existe
+   * (el backend responde 404, que es la señal de "dale de alta los datos").
+   */
+  buscarTitularPorDocumento: async (documento) => {
+    try {
+      return await request(`/titulares/buscar?documento=${encodeURIComponent(documento)}`);
+    } catch (err) {
+      if (err.status === 404) return null;
+      throw err;
+    }
+  },
 
   crearReserva: (payload) =>
     request('/reservas', { method: 'POST', body: JSON.stringify(payload) }),

@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
 import { api } from './api';
+import CamposTitular from './CamposTitular';
+import { useTitular } from './useTitular';
 
 // Seccion "Propuesta de estadia" (paridad con PanelPropuestaEstadia del Swing):
 // titular, filas de bloques solicitados (fechas, camas, atributos), busqueda de
@@ -8,18 +10,11 @@ import { api } from './api';
 // Mismos valores y orden que el enum AtributoHabitacion del backend.
 const ATRIBUTOS = ['Balcon', 'VistaAlMar', 'Jacuzzi', 'Twin', 'DosAmbientes'];
 const MAX_CANTIDAD = 50; // Swing: SpinnerNumberModel(0, 0, 50, 1)
-const NUEVO_TITULAR = 'nuevo';
 const FORMATO_MONTO = new Intl.NumberFormat('es-UY', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 const MONEDA_POR_DEFECTO = 'USD';
-// El backend solo expone la creacion de reservas para un titular existente
-// (POST /api/propuestas/persistir recibe titularId): el alta de titulares que
-// hace PanelPropuestaEstadia con ControladorPersonas.altaTitular no tiene
-// todavia endpoint REST, asi que la web avisa en vez de fallar en silencio.
-const MENSAJE_ALTA_TITULAR =
-  'El alta de un titular nuevo no está disponible en la web: elegí un titular existente para crear la reserva.';
 
 function formatearMonto(monto, moneda) {
   const valor = Number(monto);
@@ -117,16 +112,9 @@ function resumen(propuesta) {
 }
 
 export default function PropuestaEstadia({ titulares = [], onPrevisualizar, onCreada }) {
-  const [titularId, setTitularId] = useState(() =>
-    titulares.length > 0 ? String(titulares[0].id) : NUEVO_TITULAR,
-  );
-  const [nuevoTitular, setNuevoTitular] = useState({
-    nombres: '',
-    apellidos: '',
-    celular: '',
-    telefono: '',
-    email: '',
-  });
+  // Flujo documento primero: se busca el documento del titular y, si no existe,
+  // se da de alta con POST /api/titulares al aceptar la propuesta.
+  const titular = useTitular();
   const [bloques, setBloques] = useState(() => [bloqueNuevo(hoyISO())]);
   const [propuestas, setPropuestas] = useState([]);
   const [seleccion, setSeleccion] = useState(-1);
@@ -140,8 +128,6 @@ export default function PropuestaEstadia({ titulares = [], onPrevisualizar, onCr
   // Generacion de busqueda: invalida resultados de pedidos ya cancelados
   // (paridad con PanelPropuestaEstadia.generacionBusqueda).
   const generacionRef = useRef(0);
-
-  const esNuevoTitular = titularId === NUEVO_TITULAR;
 
   function previsualizar(bloquesElegidos) {
     if (onPrevisualizar) onPrevisualizar(bloquesElegidos || []);
@@ -232,19 +218,14 @@ export default function PropuestaEstadia({ titulares = [], onPrevisualizar, onCr
       setError('Seleccioná una propuesta de la lista.');
       return;
     }
-    if (esNuevoTitular) {
-      setError(MENSAJE_ALTA_TITULAR);
-      return;
-    }
-    if (!titularId) {
-      setError('Elegí un titular para crear la reserva.');
-      return;
-    }
     setGuardando(true);
     setEstado('Guardando reserva…');
     try {
+      // Busca el documento y, si el titular no existe, lo da de alta antes de
+      // persistir la reserva.
+      const titularId = await titular.resolverTitularId();
       const reserva = await api.persistirPropuestas(
-        Number(titularId),
+        titularId,
         aBloquesPersistir(elegida.bloques),
       );
       setEstado(`Reserva #${reserva?.id} creada.`);
@@ -278,60 +259,8 @@ export default function PropuestaEstadia({ titulares = [], onPrevisualizar, onCr
       <h2 className="propuesta-titulo">Propuesta de estadía</h2>
 
       <div className="propuesta-titular">
-        <label>
-          Titular
-          <select value={titularId} onChange={(e) => setTitularId(e.target.value)}>
-            {titulares.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.nombre}
-              </option>
-            ))}
-            <option value={NUEVO_TITULAR}>— nuevo titular —</option>
-          </select>
-        </label>
-        <label>
-          Nombres (nuevo)
-          <input
-            value={nuevoTitular.nombres}
-            disabled={!esNuevoTitular}
-            onChange={(e) => setNuevoTitular((n) => ({ ...n, nombres: e.target.value }))}
-          />
-        </label>
-        <label>
-          Apellidos (nuevo)
-          <input
-            value={nuevoTitular.apellidos}
-            disabled={!esNuevoTitular}
-            onChange={(e) => setNuevoTitular((n) => ({ ...n, apellidos: e.target.value }))}
-          />
-        </label>
-        <label>
-          Celular
-          <input
-            value={nuevoTitular.celular}
-            disabled={!esNuevoTitular}
-            onChange={(e) => setNuevoTitular((n) => ({ ...n, celular: e.target.value }))}
-          />
-        </label>
-        <label>
-          Teléfono fijo
-          <input
-            value={nuevoTitular.telefono}
-            disabled={!esNuevoTitular}
-            onChange={(e) => setNuevoTitular((n) => ({ ...n, telefono: e.target.value }))}
-          />
-        </label>
-        <label>
-          Email
-          <input
-            value={nuevoTitular.email}
-            disabled={!esNuevoTitular}
-            onChange={(e) => setNuevoTitular((n) => ({ ...n, email: e.target.value }))}
-          />
-        </label>
+        <CamposTitular titular={titular} titulares={titulares} />
       </div>
-
-      {esNuevoTitular && <div className="propuesta-aviso">{MENSAJE_ALTA_TITULAR}</div>}
 
       <div className="propuesta-bloques">
         <div className="propuesta-bloques-cabecera">
