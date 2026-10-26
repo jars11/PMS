@@ -16,3 +16,4 @@ T12d backend alta de titulares (nuevo titular) [done] 02bd4d2
 T13 documento del titular heredado de Persona + autocompletado por documento [done] 02bd4d2
 T14 tooltip habitacion + scrolls + sin selector titular + sin leyenda [done] 780d12c
 T15 rediseño propuesta (panel lateral, bloques arriba, cruz, titular al confirmar) [done] cdd12b9
+T16 columna hoy + reservas orden/busqueda + compatibilidad real de mover [done] 0c4f58a
