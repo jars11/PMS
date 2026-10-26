@@ -350,7 +350,7 @@ label {
 .cal-sticky {
   position: sticky;
   left: 0;
-  z-index: 4;
+  z-index: 2;
   background: var(--panel-2);
   color: var(--texto);
   font-weight: 600;
@@ -410,7 +410,8 @@ label {
   bottom: 4px;
   background: #e57373;
   border-radius: 2px;
-  z-index: 1;
+  /* Por encima de la columna sticky (z-index 2) para que su borde no cruce la barra. */
+  z-index: 3;
 }
 
 .barra-gris {
