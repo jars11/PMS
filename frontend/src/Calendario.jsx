@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 
 // ---------------------------------------------------------------- fechas
@@ -584,6 +584,9 @@ function celdaInfo(m, est, fila, col, fecha) {
 export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarReserva, onCambio, refreshSignal = 0 }) {
   const contRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  // Ancho ya medido del contenedor: hasta que no se mide no se sabe cuantas
+  // noches entran, asi que no se piden reservas con el ancho por defecto.
+  const [medido, setMedido] = useState(false);
   const [fechaInicio, setFechaInicio] = useState(() => fechaISO(new Date()));
   const [fechaInput, setFechaInput] = useState(() => formatearDMA(fechaISO(new Date())));
   const [modelo, setModelo] = useState(null);
@@ -629,8 +632,12 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
   }, [fechaInicio, noches, habitaciones, render]);
 
   useEffect(() => {
+    // Sin medicion previa del contenedor la grilla se pide con
+    // NOCHES_POR_DEFECTO y esa respuesta puede pisar a la del ancho real.
+    if (!medido) return undefined;
     recargar();
-  }, [recargar, refreshSignal]);
+    return undefined;
+  }, [medido, recargar, refreshSignal]);
 
   const recargarRef = useRef(recargar);
   useEffect(() => {
@@ -673,11 +680,38 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     };
   }, [menu]);
 
+  // Medir el contenedor define cuantas noches entran y el ancho de cada
+  // columna. La medicion inicial es sincronica (useLayoutEffect corre antes de
+  // que el navegador pinte) porque al montar la pestana el ancho todavia era 0:
+  // el primer frame usaba NOCHES_POR_DEFECTO y la tabla se veia desbordada /
+  // superpuesta hasta que llegaba el primer callback del ResizeObserver, ya
+  // despues del paint (fallo al pasar Reservas -> Calendario).
+  const medirContenedor = useCallback(() => {
+    const el = contRef.current;
+    if (!el) return;
+    const ancho = el.getBoundingClientRect().width;
+    if (ancho <= 0) return;
+    setContainerWidth((prev) => (prev === ancho ? prev : ancho));
+    setMedido(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    medirContenedor();
+    // Segundo intento en el frame siguiente: si el panel recien se hace visible
+    // el primer calculo de layout puede devolver 0; un ancho 0 nunca se guarda
+    // para no volver al ancho por defecto.
+    const raf = requestAnimationFrame(medirContenedor);
+    return () => cancelAnimationFrame(raf);
+  }, [medirContenedor]);
+
   useEffect(() => {
     const el = contRef.current;
     if (!el) return undefined;
     const ro = new ResizeObserver((entries) => {
-      setContainerWidth(entries[0]?.contentRect?.width ?? 0);
+      const ancho = entries[0]?.contentRect?.width ?? 0;
+      if (ancho <= 0) return;
+      setContainerWidth((prev) => (prev === ancho ? prev : ancho));
+      setMedido(true);
     });
     ro.observe(el);
     return () => ro.disconnect();

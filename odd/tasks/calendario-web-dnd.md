@@ -61,6 +61,10 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 - T6 [S9] Menú contextual con click derecho: editar reserva y alta en una noche libre (paridad con CalendarioPanel.mostrarMenu). Ruta: writer. Commit: 96547ec.
 - T7 [S9] Toggle de late check-out por reserva. Ruta: writer. Commit: 5b7769c.
 - T8 [S9] Navegación Shift+rueda día a día (Swing no tiene doble click). Ruta: writer. Commit: b9f1063.
+- T9 [S10] Calendario como pestaña inicial al entrar como recepcionista. Ruta: writer. Commit: pendiente.
+- T10 [S11] Quitar la barra de scroll horizontal del calendario (ajustar noches al ancho). Ruta: writer. Commit: pendiente.
+- T11 [S12] Corregir el fallo gráfico al cambiar Reservas -> Calendario. Ruta: writer. Commit: pendiente.
+- T12 [S13] Sección "Propuesta de estadía" debajo del calendario (split vertical redimensionable), replicando PanelPropuestaEstadia: cargar bloques, buscar propuestas, previsualizar en gris y crear la reserva. Ruta: writer. Commit: pendiente.
 
 ## Log
 
@@ -80,3 +84,4 @@ Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", 
 - L14. T8 completado (b9f1063): Shift+rueda navega la fecha de inicio día a día (arriba=anterior, abajo=siguiente), con listener nativo no-passive (React registra `wheel` como passive). Swing no tiene doble click, así que no se agregó. Verificado en navegador: `20/10 → 21/10 → 20/10`. build/lint verdes. **Cierra la paridad S9 (T5–T8).**
 - L15. Ajuste pedido: las placas de las flechas de redimensionar (check-in y check-out) tienen el mismo ancho fijo (ANCHO_PLACA = 18px); la del check-out entra en la celda anterior (última noche de la misma reserva), como Swing. Verificado en navegador: inicio 18px, fin 18px (antes el fin ~15px). build/lint verdes.
 - L16. UX de redimensionar cambiada (pedido del usuario): se eliminan los handles visibles (`.handle-placa`/`.handle-flecha`). El rango se redimensiona por hover + drag sobre el borde real (franja de 9px) de la barra, sin click/selección previa; cursor `ew-resize` al hover y durante el drag (detección `extremoEnPunto`). Verificado en navegador: 0 handles, cursor `ew-resize`. build/lint verdes; harness de la función 17/17 y diferencial de helpers compartidos sin cambios.
+- L17. Pedido del usuario (verbatim): `el calendario debería de ser lo primero que aparece al entrar como recepcionista. Tampoco debería haber una barra horizontal debajo en el calendario. Al cliquear reservas y luego calendario hay un fallo gráfico en el calendario. Recuerda hacer todo como estaba en swing. En swing por ejemplo había una sección para colocar la reserva automáticamente debajo del calendario que se podía ajustar el tamaño y deslizar en las habitaciones si se acotaba el espacio`. En Swing, RecepcionistaFrame pone Calendario primero y debajo PanelPropuestaEstadia en un JSplitPane vertical redimensionable (split.setResizeWeight(0.55), oneTouchExpandable).

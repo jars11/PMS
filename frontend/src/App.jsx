@@ -8,7 +8,7 @@ import './App.css';
 
 export default function App() {
   const [sesion, setSesion] = useState(null);
-  const [pestana, setPestana] = useState('lista');
+  const [pestana, setPestana] = useState('calendario');
   const [habitaciones, setHabitaciones] = useState([]);
   const [titulares, setTitulares] = useState([]);
   const [reservas, setReservas] = useState([]);
@@ -105,14 +105,14 @@ export default function App() {
       </header>
 
       <nav className="tabs">
-        <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => setPestana('lista')}>
-          Reservas
-        </button>
         <button
           className={pestana === 'calendario' ? 'activo' : ''}
           onClick={() => setPestana('calendario')}
         >
           Calendario
+        </button>
+        <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => setPestana('lista')}>
+          Reservas
         </button>
         <button className="nueva" onClick={() => { setReservaEnEdicion(null); setPrecarga(null); setFormAbierto(true); }}>
           + Nueva reserva

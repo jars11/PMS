@@ -300,7 +300,9 @@ label {
 }
 
 .calendario-scroll {
-  overflow-x: auto;
+  /* Paridad con el calendario Swing: sin barra horizontal. La grilla ajusta
+     las noches visibles al ancho del contenedor (nochesVisibles). */
+  overflow-x: hidden;
   background: var(--panel);
   border-radius: 8px;
 }
