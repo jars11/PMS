@@ -9,4 +9,6 @@ T8 shift+rueda navegar dia a dia [done] b9f1063
 T9 calendario pestaña inicial [done] b86e1b8
 T10 sin scroll horizontal [done] b86e1b8
 T11 render fix al cambiar pestaña [done] b86e1b8
-T12 seccion propuesta de estadia bajo el calendario [pending]
+T12a backend propuestas buscar/persistir [done] 9d6ae3a
+T12b frontend panel bloques + split redimensionable [pending]
+T12c frontend propuestas preview gris + crear reserva [pending]
