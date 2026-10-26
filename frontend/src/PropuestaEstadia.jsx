@@ -111,7 +111,7 @@ function resumen(propuesta) {
   return `${prefijo}${partes.join(', ')} — total ${formatearMonto(total, bloques[0]?.moneda)}`;
 }
 
-export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
+export default function PropuestaEstadia({ onPrevisualizar, onCreada, onCerrar }) {
   // Flujo documento primero: se busca el documento del titular y, si no existe,
   // se da de alta con POST /api/titulares al aceptar la propuesta.
   const titular = useTitular();
@@ -156,8 +156,10 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
 
   function agregarBloque() {
     setBloques((previos) => {
-      const ultimo = previos[previos.length - 1];
-      return [...previos, bloqueNuevo(ultimo ? ultimo.fechaFin : hoyISO())];
+      // El bloque nuevo se inserta arriba y conserva el check-in del bloque
+      // actual (no se incrementa la fecha): el usuario ajusta el check-out.
+      const actual = previos[0];
+      return [bloqueNuevo(actual ? actual.fechaInicio : hoyISO()), ...previos];
     });
   }
 
@@ -210,12 +212,33 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
     }
   }
 
-  async function aceptar() {
+  /** "Aceptar": recién acá se piden los datos del titular, antes de persistir. */
+  function pedirTitular() {
+    setError('');
+    setAviso('');
+    if (!propuestas[seleccion]) {
+      setError('Seleccioná una propuesta de la lista.');
+      return;
+    }
+    setPaso('titular');
+    setEstado('Confirmá los datos del titular para crear la reserva.');
+  }
+
+  /** Vuelve de los datos del titular a la lista de propuestas. */
+  function volverAPropuestas() {
+    setError('');
+    setAviso('');
+    setPaso('propuestas');
+    setEstado(`${propuestas.length} propuesta(s) encontrada(s).`);
+  }
+
+  async function confirmar() {
     setError('');
     setAviso('');
     const elegida = propuestas[seleccion];
     if (!elegida) {
       setError('Seleccioná una propuesta de la lista.');
+      setPaso('propuestas');
       return;
     }
     setGuardando(true);
@@ -234,6 +257,7 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
       setSeleccion(-1);
       previsualizar([]);
       setPaso('inicial');
+      titular.reiniciar();
       if (onCreada) onCreada();
     } catch (err) {
       setError(err.message);
@@ -251,16 +275,30 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
     setEstado('');
     setAviso('');
     setError('');
+    // Los datos del titular se piden de nuevo en la próxima propuesta.
+    titular.reiniciar();
     previsualizar([]);
+  }
+
+  function cerrar() {
+    cancelar();
+    if (onCerrar) onCerrar();
   }
 
   return (
     <section className="propuesta">
-      <h2 className="propuesta-titulo">Propuesta de estadía</h2>
-
-      <div className="propuesta-titular">
-        <CamposTitular titular={titular} />
-      </div>
+      <header className="propuesta-cabecera">
+        <h2 className="propuesta-titulo">Propuesta de estadía</h2>
+        <button
+          type="button"
+          className="propuesta-cerrar"
+          onClick={cerrar}
+          title="Cerrar"
+          aria-label="Cerrar propuesta de estadía"
+        >
+          ×
+        </button>
+      </header>
 
       <div className="propuesta-bloques">
         <div className="propuesta-bloques-cabecera">
@@ -271,6 +309,17 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
         </div>
         {bloques.map((bloque, i) => (
           <div className="propuesta-bloque" key={i}>
+            <span className="propuesta-bloque-numero">Bloque {i + 1}</span>
+            <button
+              type="button"
+              className="propuesta-bloque-quitar"
+              onClick={() => quitarBloque(i)}
+              disabled={bloques.length <= 1}
+              title="Quitar bloque"
+              aria-label={`Quitar bloque ${i + 1}`}
+            >
+              ×
+            </button>
             <label>
               Check-in
               <input
@@ -340,16 +389,6 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
                 </label>
               ))}
             </fieldset>
-            <div className="propuesta-bloque-acciones">
-              <button
-                type="button"
-                className="secundario"
-                onClick={() => quitarBloque(i)}
-                disabled={bloques.length <= 1}
-              >
-                Quitar bloque
-              </button>
-            </div>
           </div>
         ))}
       </div>
@@ -375,26 +414,49 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
         </div>
       )}
 
+      {paso === 'titular' && (
+        <div className="propuesta-titular">
+          <h3>Datos del titular</h3>
+          <CamposTitular titular={titular} autoFocusDocumento />
+        </div>
+      )}
+
       {aviso && <div className="propuesta-aviso">{aviso}</div>}
       {error && <div className="error">{error}</div>}
 
       <div className="propuesta-acciones">
         <span className="propuesta-estado">{estado}</span>
-        {paso === 'inicial' ? (
+        {paso === 'inicial' && (
           <button type="button" onClick={buscar} disabled={buscando || guardando}>
             Buscar propuestas
           </button>
-        ) : (
+        )}
+        {paso === 'propuestas' && (
           <>
             <button
               type="button"
-              onClick={aceptar}
+              onClick={pedirTitular}
               disabled={buscando || guardando || propuestas.length === 0}
             >
               Aceptar y crear reserva
             </button>
             <button type="button" className="secundario" onClick={cancelar} disabled={guardando}>
               Cancelar
+            </button>
+          </>
+        )}
+        {paso === 'titular' && (
+          <>
+            <button type="button" onClick={confirmar} disabled={guardando}>
+              Confirmar y crear reserva
+            </button>
+            <button
+              type="button"
+              className="secundario"
+              onClick={volverAPropuestas}
+              disabled={guardando}
+            >
+              Volver
             </button>
           </>
         )}

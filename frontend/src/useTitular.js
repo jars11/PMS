@@ -70,6 +70,18 @@ export function useTitular(titularInicial = null) {
     setDatos((previos) => ({ ...previos, [campo]: valor }));
   }
 
+  /** Vuelve al estado inicial: el próximo flujo pide el documento de nuevo. */
+  function reiniciar() {
+    documentoVigenteRef.current = '';
+    setTipoDocumento(TIPO_DOCUMENTO_POR_DEFECTO);
+    setNumeroDocumento('');
+    setDatos(aDatosDe(null));
+    setExistente(null);
+    setConsultando(false);
+    setMensaje('');
+    setError('');
+  }
+
   /**
    * Busca el documento tipeado y autocompleta el titular cuando existe. Se
    * dispara al salir del campo y antes de guardar (para que un click directo en
@@ -152,6 +164,7 @@ export function useTitular(titularInicial = null) {
     mensaje,
     error,
     buscar,
+    reiniciar,
     resolverTitularId,
   };
 }

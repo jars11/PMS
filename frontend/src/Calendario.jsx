@@ -1545,9 +1545,6 @@ export default function Calendario({
           }}
           placeholder="dd/MM/yyyy"
         />
-        <button type="button" className="cal-refrescar" onClick={aplicarFecha} title="Refrescar">
-          ↻
-        </button>
       </div>
 
       {aviso && (

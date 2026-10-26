@@ -3,7 +3,6 @@ import Login from './Login';
 import ReservasLista from './ReservasLista';
 import Calendario from './Calendario';
 import PropuestaEstadia from './PropuestaEstadia';
-import SplitVertical from './SplitVertical';
 import ReservaForm from './ReservaForm';
 import { api } from './api';
 import './App.css';
@@ -20,7 +19,9 @@ export default function App() {
   const [reservaEnEdicion, setReservaEnEdicion] = useState(null);
   const [precarga, setPrecarga] = useState(null);
   const [calendarioVersion, setCalendarioVersion] = useState(0);
-  // Preview gris de la propuesta elegida en el asistente de abajo.
+  // Panel lateral derecho deslizante con la propuesta de estadía.
+  const [propuestaAbierta, setPropuestaAbierta] = useState(false);
+  // Preview gris de la propuesta elegida en el panel lateral.
   const [previsualizacion, setPrevisualizacion] = useState([]);
 
   const cargarDatos = useCallback(async () => {
@@ -71,9 +72,13 @@ export default function App() {
     setSesion(null);
   }
 
-  // El asistente se desmonta al cambiar de pestana: su preview no debe quedar.
+  // El panel de la propuesta se desmonta al cambiar de pestaña: su preview no
+  // debe quedar.
   function cambiarPestana(destino) {
-    if (destino !== 'calendario') setPrevisualizacion([]);
+    if (destino !== 'calendario') {
+      setPrevisualizacion([]);
+      setPropuestaAbierta(false);
+    }
     setPestana(destino);
   }
 
@@ -134,7 +139,14 @@ export default function App() {
         <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => cambiarPestana('lista')}>
           Reservas
         </button>
-        <button className="nueva" onClick={() => { setReservaEnEdicion(null); setPrecarga(null); setFormAbierto(true); }}>
+        <button
+          className="nueva"
+          onClick={() => {
+            setReservaEnEdicion(null);
+            setPrecarga(null);
+            setPropuestaAbierta(true);
+          }}
+        >
           + Nueva reserva
         </button>
       </nav>
@@ -150,10 +162,11 @@ export default function App() {
       )}
 
       {!cargando && pestana === 'calendario' && (
-        // Paridad con RecepcionistaFrame: calendario arriba y "Propuesta de
-        // estadía" abajo, en un split vertical redimensionable.
-        <SplitVertical
-          arriba={
+        // Calendario a la izquierda y, al abrir "+ Nueva reserva", la propuesta
+        // de estadía se desliza desde la derecha en un panel lateral: el
+        // calendario se achica y conserva el preview gris de la elegida.
+        <div className={`calendario-layout${propuestaAbierta ? ' con-panel' : ''}`}>
+          <div className="calendario-zona">
             <Calendario
               habitaciones={habitaciones}
               onNuevaPrecargada={(p) => { setReservaEnEdicion(null); setPrecarga(p); setFormAbierto(true); }}
@@ -162,19 +175,26 @@ export default function App() {
               refreshSignal={calendarioVersion}
               propuestasPreview={previsualizacion}
             />
-          }
-          abajo={
-            <PropuestaEstadia
-              onPrevisualizar={setPrevisualizacion}
-              onCreada={() => {
-                refrescarReservas();
-                // La propuesta puede haber dado de alta un titular nuevo.
-                refrescarTitulares();
-                setCalendarioVersion((v) => v + 1);
-              }}
-            />
-          }
-        />
+          </div>
+          <aside
+            className="propuesta-panel"
+            aria-hidden={!propuestaAbierta}
+            inert={!propuestaAbierta}
+          >
+            <div className="propuesta-panel-inner">
+              <PropuestaEstadia
+                onPrevisualizar={setPrevisualizacion}
+                onCerrar={() => setPropuestaAbierta(false)}
+                onCreada={() => {
+                  refrescarReservas();
+                  // La propuesta puede haber dado de alta un titular nuevo.
+                  refrescarTitulares();
+                  setCalendarioVersion((v) => v + 1);
+                }}
+              />
+            </div>
+          </aside>
+        </div>
       )}
 
       {formAbierto && (

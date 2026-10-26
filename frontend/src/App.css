@@ -222,20 +222,6 @@ label {
   padding: 6px 8px;
 }
 
-.cal-refrescar {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  font-size: 1.1rem;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel-2);
-  color: var(--texto);
-  border: 1px solid var(--borde);
-}
-
 .cal-aviso {
   display: flex;
   align-items: flex-start;
@@ -468,6 +454,60 @@ label {
   color: #fff;
 }
 
+/* Layout del calendario con panel lateral derecho deslizante: el calendario
+   ocupa todo el ancho y, al abrir la propuesta, el panel se desliza de derecha
+   a izquierda y lo achica/arrincona a la izquierda. La propuesta ya no va
+   debajo del calendario. */
+.calendario-layout {
+  --ancho-propuesta: clamp(340px, 34vw, 440px);
+  display: flex;
+  align-items: stretch;
+  height: clamp(420px, 70vh, 760px);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.calendario-zona {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  overflow: hidden;
+}
+
+/* El contenido del panel tiene ancho fijo y se ancla a la derecha: al crecer el
+   panel desde 0 el contenido se revela desde el borde derecho (deslizamiento). */
+.propuesta-panel {
+  flex: 0 0 auto;
+  width: 0;
+  display: flex;
+  justify-content: flex-end;
+  overflow: hidden;
+  opacity: 0;
+  border-left: 0 solid var(--borde);
+  transition:
+    width 0.28s ease,
+    border-left-width 0.28s ease,
+    opacity 0.18s ease;
+}
+
+.calendario-layout.con-panel .propuesta-panel {
+  width: var(--ancho-propuesta);
+  opacity: 1;
+  border-left-width: 1px;
+}
+
+.propuesta-panel-inner {
+  flex: 0 0 auto;
+  width: var(--ancho-propuesta);
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+}
+
 /* Split vertical redimensionable (paridad con el JSplitPane vertical del
    Swing): calendario arriba, "Propuesta de estadía" abajo. El alto del split
    lo define su contenido (alto del calendario + divisor + propuesta), asi que
@@ -543,19 +583,57 @@ label {
   font-size: 1rem;
 }
 
+.propuesta-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.propuesta-cerrar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--texto-tenue);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.propuesta-cerrar:hover {
+  color: var(--texto);
+  border-color: var(--texto-tenue);
+}
+
 .propuesta h3 {
   margin: 0;
   font-size: 0.9rem;
   color: var(--texto-tenue);
 }
 
+/* Datos del titular: se piden recién al confirmar la reserva. */
 .propuesta-titular {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--borde);
   border-radius: 8px;
+}
+
+/* En el panel angosto las filas del titular se apilan si no entran. */
+.propuesta-titular .fila {
+  flex-wrap: wrap;
+}
+
+.propuesta-titular .fila label {
+  min-width: 140px;
 }
 
 .propuesta input:disabled {
@@ -576,12 +654,46 @@ label {
 }
 
 .propuesta-bloque {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--borde);
   border-radius: 8px;
+}
+
+.propuesta-bloque-numero {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--texto-tenue);
+  padding-right: 28px;
+}
+
+/* Cruz para quitar el bloque, en la esquina superior derecha del bloque. */
+.propuesta-bloque-quitar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--texto-tenue);
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.propuesta-bloque-quitar:hover:not(:disabled) {
+  background: #450a0a;
+  color: var(--peligro);
+  border-color: var(--peligro);
 }
 
 .propuesta-atributos {
@@ -600,12 +712,6 @@ label {
   padding: 0 4px;
   font-size: 0.8rem;
   color: var(--texto-tenue);
-}
-
-.propuesta-bloque-acciones {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: flex-end;
 }
 
 .propuesta-lista-wrap {
