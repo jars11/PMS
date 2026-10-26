@@ -96,8 +96,9 @@ const ANCHO_NOCHE_MIN = 56;
 const NOCHES_POR_DEFECTO = 14;
 const MARGEN_VERTICAL = 4;
 const UMBRAL_ARRASTRE_PX = 5;
+// Zona activa (en px) contra el borde real de una barra: al pasar el mouse o
+// presionar dentro de esta franja del extremo se redimensiona la reserva.
 const ANCHO_FLECHA = 9;
-const ANCHO_PLACA = 2 * ANCHO_FLECHA;
 
 function segmento(bloque, dia) {
   if (!bloque || !dia || !bloque.checkIn || !bloque.checkOut) return null;
@@ -205,7 +206,6 @@ function nuevoEstado() {
     reservaSeleccionadaId: null,
     bloqueSeleccionado: null,
     bordeRedimension: null,
-    direccionRedimension: null,
     inicioRedimension: null,
     finRedimension: null,
     resizeBordeX: 0,
@@ -372,6 +372,44 @@ function bloqueEnPunto(m, fila, col, e, td) {
   return null;
 }
 
+/**
+ * Extremo de barra bajo el puntero, sin necesidad de tener la reserva
+ * seleccionada. Solo cuenta como extremo el borde real del bloque:
+ *  - inicio = borde izquierdo del segmento head (celda del check-in);
+ *  - fin    = borde derecho del segmento tail (celda del check-out).
+ * Cuando la celda tiene las dos barras (una sale y otra entra ese dia) gana
+ * el borde mas cercano al puntero. Devuelve null si no esta sobre un extremo.
+ */
+function extremoEnPunto(m, fila, col, e, td) {
+  if (!m || !td || fila < 0 || col < 1 || col > m.noches) return null;
+  const rect = td.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (y < MARGEN_VERTICAL || y > rect.height - MARGEN_VERTICAL) return null;
+  const ancho = rect.width;
+  const fecha = m.fechaDeColumna(col);
+  const candidatos = [];
+
+  const head = m.bloqueEn(fila, col);
+  if (head && head.checkIn === fecha) {
+    const seg = segmento(head, fecha);
+    if (seg) candidatos.push({ bloque: head, borde: 'inicio', x: pixeles(seg, ancho)[0] });
+  }
+  const tail = m.bloqueSalidaEn(fila, col);
+  if (tail) {
+    const seg = segmento(tail, fecha);
+    if (seg) candidatos.push({ bloque: tail, borde: 'fin', x: pixeles(seg, ancho)[1] });
+  }
+
+  let mejor = null;
+  for (const candidato of candidatos) {
+    const distancia = Math.abs(x - candidato.x);
+    if (distancia > ANCHO_FLECHA) continue;
+    if (!mejor || distancia < mejor.distancia) mejor = { ...candidato, distancia };
+  }
+  return mejor;
+}
+
 function rangoDeColumnas(m, cIni, cFin) {
   const primera = Math.max(1, Math.min(cIni, cFin));
   const ultima = Math.min(m.noches, Math.max(cIni, cFin));
@@ -464,7 +502,7 @@ function seleccionarReserva(est, fila, bloque) {
 }
 
 /**
- * Re-selects the reservation after a reload so the resize arrows survive a
+ * Re-selects the reservation after a reload so the click selection survives a
  * successful move/resize (graceful continuation instead of silent capability loss).
  */
 function reSeleccionarPorReserva(est, m, reservaId) {
@@ -687,25 +725,36 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     return () => el.removeEventListener('wheel', rueda);
   }, []);
 
-  function iniciarRedimension(handle, e, est) {
-    const borde = handle.dataset.borde;
-    const direccion = handle.dataset.direccion;
-    if (!est.haySeleccion || !est.bloqueSeleccionado) return;
-    const placa = handle.closest('[data-placa]');
-    const td = handle.closest('td[data-col]');
-    const rect = placa ? placa.getBoundingClientRect() : null;
-    const tdRect = td ? td.getBoundingClientRect() : null;
-    let bordeX = e.clientX;
-    if (rect) bordeX = borde === 'inicio' ? rect.left : rect.right;
+  /**
+   * Arranca el redimensionado directo desde el extremo de la barra, sin click
+   * ni seleccion previa: el bloque bajo el puntero pasa a ser el bloque que se
+   * esta redimensionando.
+   */
+  function iniciarRedimension(m, est, e, fila, columna, td, extremo) {
+    const bloque = extremo.bloque;
+    if (!bloque || bloque.reservaId == null || !bloque.checkIn || !bloque.checkOut) return;
+    const rect = td.getBoundingClientRect();
+    const ancho = rect.width > 0 ? rect.width : ANCHO_NOCHE_MIN;
+    const seg = segmento(bloque, m.fechaDeColumna(columna));
+    const [x0, x1] = pixeles(seg, ancho);
     est.tipo = 'redimension';
-    est.bordeRedimension = borde;
-    est.direccionRedimension = direccion;
-    est.inicioRedimension = est.bloqueSeleccionado.checkIn;
-    est.finRedimension = est.bloqueSeleccionado.checkOut;
-    est.resizeBordeX = bordeX;
-    est.resizeAnchoCelda = tdRect ? tdRect.width : ANCHO_NOCHE_MIN;
+    // El arrastre no depende de la seleccion por click, pero reusa los mismos
+    // campos para que el preview del rango se pinte igual que antes.
+    est.haySeleccion = false;
+    est.filaSeleccionada = fila;
+    est.reservaSeleccionadaId = bloque.reservaId;
+    est.bloqueSeleccionado = bloque;
+    est.bordeRedimension = extremo.borde;
+    est.inicioRedimension = bloque.checkIn;
+    est.finRedimension = bloque.checkOut;
+    est.resizeBordeX = rect.left + (extremo.borde === 'inicio' ? x0 : x1);
+    est.resizeAnchoCelda = ancho;
     est.presionPendiente = false;
+    est.filaPresion = -1;
+    est.columnaPresion = -1;
+    est.puntoPresion = null;
     est.bloquePresion = null;
+    fijarCursorExtremo(true);
     render();
   }
 
@@ -863,7 +912,6 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
 
     est.tipo = 'ninguno';
     est.bordeRedimension = null;
-    est.direccionRedimension = null;
     est.inicioRedimension = null;
     est.finRedimension = null;
     est.resizeBordeX = 0;
@@ -893,6 +941,24 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     } finally {
       enVueloRef.current = false;
     }
+  }
+
+  /**
+   * Cursor del contenedor: `ew-resize` mientras el puntero esta sobre un
+   * extremo de barra o durante el arrastre. Se aplica por DOM para no
+   * re-renderizar la grilla en cada movimiento del mouse.
+   */
+  function fijarCursorExtremo(activo) {
+    const el = contRef.current;
+    if (!el) return;
+    const valor = activo ? 'ew-resize' : '';
+    if (el.style.cursor !== valor) el.style.cursor = valor;
+  }
+
+  /** Al salir del calendario se oculta el tooltip y se suelta el cursor de redimension. */
+  function salirDelContenedor() {
+    ocultarTooltip();
+    if (estadoRef.current.tipo !== 'redimension') fijarCursorExtremo(false);
   }
 
   function ocultarTooltip() {
@@ -928,18 +994,28 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
   function manejarHover(e) {
     const m = modeloRef.current;
     const est = estadoRef.current;
-    if (!m || est.tipo !== 'ninguno' || est.presionPendiente) {
+    if (!m) return;
+    // Durante el arrastre el cursor no debe volver a default/grab.
+    if (est.tipo === 'redimension') {
+      fijarCursorExtremo(true);
       ocultarTooltip();
       return;
     }
-    // Sobre las flechas de redimension el tooltip taparia el handle.
-    if (e.target && e.target.closest && e.target.closest('[data-handle]')) {
+    if (est.tipo !== 'ninguno' || est.presionPendiente) {
+      fijarCursorExtremo(false);
       ocultarTooltip();
       return;
     }
     const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
     const fila = td ? Number(td.dataset.fila) : -1;
     const col = td ? Number(td.dataset.col) : -1;
+    // Sobre el extremo de una barra: cursor de redimension y sin tooltip.
+    if (extremoEnPunto(m, fila, col, e, td)) {
+      fijarCursorExtremo(true);
+      ocultarTooltip();
+      return;
+    }
+    fijarCursorExtremo(false);
     const bloque = fila >= 0 && col >= 1 ? bloqueEnPunto(m, fila, col, e, td) : null;
     if (!bloque) {
       ocultarTooltip();
@@ -1052,13 +1128,6 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     // El tooltip no debe tapar ni frenar el crear/mover/redimensionar.
     ocultarTooltip();
 
-    const handle = e.target && e.target.closest ? e.target.closest('[data-handle]') : null;
-    if (handle && est.haySeleccion && est.tipo !== 'redimension') {
-      iniciarRedimension(handle, e, est);
-      e.preventDefault();
-      return;
-    }
-
     const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
     const fila = td ? Number(td.dataset.fila) : -1;
     const columna = td ? Number(td.dataset.col) : -1;
@@ -1067,6 +1136,17 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
       limpiarSeleccion(est);
       render();
       return;
+    }
+
+    // Redimensionar gana sobre seleccionar/mover: presionar en el extremo de
+    // una barra arranca el drag aunque no haya nada seleccionado.
+    if (est.tipo !== 'redimension') {
+      const extremo = extremoEnPunto(m, fila, columna, e, td);
+      if (extremo) {
+        iniciarRedimension(m, est, e, fila, columna, td, extremo);
+        e.preventDefault();
+        return;
+      }
     }
 
     const bloque = bloqueEnPunto(m, fila, columna, e, td);
@@ -1150,6 +1230,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
 
     if (est.tipo === 'redimension') {
       finalizarRedimension(m, est);
+      fijarCursorExtremo(false);
       return;
     }
     if (est.presionPendiente) {
@@ -1259,42 +1340,9 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     return cacheEtiquetas.get(clave);
   }
 
-  function renderHandle(borde, pos) {
-    const izqDir = borde === 'inicio' ? 'alargar' : 'acortar';
-    const derDir = borde === 'inicio' ? 'acortar' : 'alargar';
-    return (
-      <span className="handle-placa" data-placa data-borde={borde} style={{ left: pos.left, width: pos.width }}>
-        <span className="handle-flecha hacia-izq" data-handle data-borde={borde} data-direccion={izqDir} />
-        <span className="handle-flecha hacia-der" data-handle data-borde={borde} data-direccion={derDir} />
-      </span>
-    );
-  }
-
   function renderCelda(fila, col, fecha) {
     const info = celdaInfo(m, est, fila, col, fecha);
     const ancho = anchoCol(col);
-    let handleInicio = null;
-    let handleFin = null;
-
-    if (est.haySeleccion && est.tipo !== 'redimension' && fila === est.filaSeleccionada && est.bloqueSeleccionado) {
-      const sel = est.bloqueSeleccionado;
-      const colIni = m.columnaDeFecha(sel.checkIn);
-      const colFin = m.columnaDeFecha(sel.checkOut);
-      if (col === colIni && colIni >= 1 && colIni <= m.noches) {
-        const seg = segmento(sel, fecha);
-        const [x0] = pixeles(seg, ancho);
-        // Placa de ancho fijo (igual que el check-out), aunque se salga bordeando la celda.
-        handleInicio = { left: x0, width: ANCHO_PLACA };
-      }
-      if (col === colFin && colFin >= 1 && colFin <= m.noches) {
-        const seg = segmento(sel, fecha);
-        const [, x1] = pixeles(seg, ancho);
-        // Mismo ancho fijo que el check-in: la placa entra en la celda anterior
-        // (la última noche de esta misma reserva), como en Swing.
-        handleFin = { left: x1 - ANCHO_PLACA, width: ANCHO_PLACA };
-      }
-    }
-
     const etiquetas = [];
     const celdas = info.segments.map((s, i) => {
       const [x0, x1] = pixeles(s, ancho);
@@ -1322,8 +1370,6 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
       <td key={fecha} className={`cal-celda ${info.clase}`} data-col={col} data-fila={fila} style={{ width: ancho }}>
         {celdas}
         {etiquetas}
-        {handleInicio && renderHandle('inicio', handleInicio)}
-        {handleFin && renderHandle('fin', handleFin)}
       </td>
     );
   }
@@ -1376,7 +1422,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
         ref={contRef}
         onPointerDown={manejarPointerDown}
         onPointerMove={manejarHover}
-        onPointerLeave={ocultarTooltip}
+        onPointerLeave={salirDelContenedor}
         onContextMenu={manejarContextMenu}
       >
         {m && (

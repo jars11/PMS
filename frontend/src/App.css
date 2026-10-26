@@ -476,45 +476,6 @@ label {
   color: #fff;
 }
 
-.handle-placa {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  background: #b02a2a;
-  border-radius: 4px;
-  display: flex;
-  z-index: 3;
-  cursor: ew-resize;
-}
-
-.handle-flecha {
-  width: 50%;
-  height: 100%;
-  position: relative;
-}
-
-.handle-flecha.hacia-izq::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 2px;
-  transform: translateY(-50%);
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-right: 7px solid #fff;
-}
-
-.handle-flecha.hacia-der::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: 2px;
-  transform: translateY(-50%);
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 7px solid #fff;
-}
-
 /* Formulario modal */
 .modal-backdrop {
   position: fixed;
