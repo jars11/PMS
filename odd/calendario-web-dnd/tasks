@@ -10,5 +10,6 @@ T9 calendario pestaña inicial [done] b86e1b8
 T10 sin scroll horizontal [done] b86e1b8
 T11 render fix al cambiar pestaña [done] b86e1b8
 T12a backend propuestas buscar/persistir [done] 9d6ae3a
-T12b frontend panel bloques + split redimensionable [pending]
-T12c frontend propuestas preview gris + crear reserva [pending]
+T12b frontend panel bloques + split redimensionable [done] 66715ad
+T12c frontend propuestas preview gris + crear reserva [done] 66715ad
+T12d backend alta de titulares (nuevo titular) [pending]
