@@ -72,6 +72,54 @@ function lineasTooltipReserva(bloque, habitacion) {
   return lineas;
 }
 
+// ---------------------------------------------------- tooltip de habitacion
+// Replica la tarjeta que TablaCalendario.htmlHabitacion pinta en la app Swing:
+// "Habitacion N / Camas: ... / Cunas: ... / Atributos: ... / Estado: ...".
+
+/** Etiquetas amigables de DialogoHabitacion, en el orden del enum del backend. */
+const ATRIBUTOS_HABITACION = [
+  ['Balcon', 'Balc\u00f3n'],
+  ['VistaAlMar', 'Vista al mar'],
+  ['Jacuzzi', 'Jacuzzi'],
+  ['Twin', 'Camas separadas (Twin)'],
+  ['DosAmbientes', 'Dos ambientes'],
+];
+
+/** Atributos con etiqueta amigable y orden del enum; "ninguno" si no hay. */
+function textoAtributos(atributos) {
+  const valores = Array.isArray(atributos) ? atributos : [];
+  if (valores.length === 0) return 'ninguno';
+  const etiqueta = (valor) => {
+    const encontrado = ATRIBUTOS_HABITACION.find(([clave]) => clave === valor);
+    return encontrado ? encontrado[1] : valor;
+  };
+  const orden = (valor) => {
+    const i = ATRIBUTOS_HABITACION.findIndex(([clave]) => clave === valor);
+    return i === -1 ? ATRIBUTOS_HABITACION.length : i;
+  };
+  return [...valores]
+    .sort((a, b) => orden(a) - orden(b))
+    .map(etiqueta)
+    .join(', ');
+}
+
+/** Lineas del tooltip de una habitacion, en el mismo orden que el Swing. */
+function lineasTooltipHabitacion(habitacion) {
+  if (!habitacion) return [];
+  const matrimoniales = habitacion.camasMatrimoniales ?? 0;
+  const individuales = habitacion.camasIndividuales ?? 0;
+  const cunas = habitacion.cunas ?? 0;
+  const colchones = habitacion.colchones ?? 0;
+  const capacidad = habitacion.capacidad ?? 0;
+  return [
+    `Habitaci\u00f3n ${habitacion.numero ?? ''}`,
+    `Camas: ${matrimoniales} matrimonial(es), ${individuales} individual(es)`,
+    `Cunas: ${cunas}${SEPARADOR_DATO}Colchones: ${colchones}${SEPARADOR_DATO}Capacidad: ${capacidad}`,
+    `Atributos: ${textoAtributos(habitacion.atributos)}`,
+    `Estado: ${habitacion.limpia ? 'limpia' : 'sucia'}`,
+  ];
+}
+
 function parseDMA(txt) {
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(txt).trim());
   if (!m) return null;
@@ -1031,6 +1079,27 @@ export default function Calendario({
     setTooltip(null);
   }
 
+  /**
+   * Tooltip de la columna sticky de habitacion: mismas lineas que
+   * TablaCalendario.htmlHabitacion y el mismo mecanismo que el de reserva (el
+   * contenido solo se recalcula al pasar a otra celda).
+   */
+  function mostrarTooltipHabitacion(m, fila, e) {
+    const habitacion = fila >= 0 ? m.habitacionDeFila(fila) : null;
+    const lineas = lineasTooltipHabitacion(habitacion);
+    if (lineas.length === 0) {
+      ocultarTooltip();
+      return;
+    }
+    const clave = `hab|${lineas.join('|')}`;
+    if (clave !== tooltipClaveRef.current) {
+      tooltipClaveRef.current = clave;
+      setTooltip({ lineas, x: e.clientX, y: e.clientY });
+      return;
+    }
+    posicionarTooltip(e.clientX, e.clientY);
+  }
+
   /** Sigue al mouse y se da vuelta antes de salirse de la ventana. */
   function posicionarTooltip(x, y) {
     const el = tooltipRef.current;
@@ -1073,6 +1142,13 @@ export default function Calendario({
     const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
     const fila = td ? Number(td.dataset.fila) : -1;
     const col = td ? Number(td.dataset.col) : -1;
+    // Columna sticky de habitacion (data-col="0"): caracteristicas de la
+    // habitacion, como TablaCalendario.htmlHabitacion en Swing.
+    if (col === 0) {
+      fijarCursorExtremo(false);
+      mostrarTooltipHabitacion(m, fila, e);
+      return;
+    }
     // Sobre el extremo de una barra: cursor de redimension y sin tooltip.
     if (extremoEnPunto(m, fila, col, e, td)) {
       fijarCursorExtremo(true);
@@ -1472,11 +1548,6 @@ export default function Calendario({
         <button type="button" className="cal-refrescar" onClick={aplicarFecha} title="Refrescar">
           ↻
         </button>
-        <div className="cal-leyenda">
-          <span className="chip cal-libre-chip">Libre</span>
-          <span className="chip cal-sucia-chip">Sucia</span>
-          <span className="chip cal-barra-chip">Ocupada</span>
-        </div>
       </div>
 
       {aviso && (

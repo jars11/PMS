@@ -88,11 +88,7 @@ export default function ReservaForm({ titulares, habitaciones, reserva, precarga
       >
         <h2>{esEdicion ? 'Editar reserva' : 'Nueva reserva'}</h2>
 
-        <CamposTitular
-          titular={titular}
-          titulares={titulares}
-          autoFocusDocumento={!esEdicion}
-        />
+        <CamposTitular titular={titular} autoFocusDocumento={!esEdicion} />
 
         <label>
           Habitación

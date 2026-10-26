@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 // Split vertical redimensionable, paridad con el JSplitPane.VERTICAL_SPLIT de
 // RecepcionistaFrame (calendario arriba, propuesta de estadia abajo): el usuario
 // arrastra el divisor para ajustar el alto y el reparto inicial es 55/45
-// (split.setResizeWeight(0.55) en Swing).
+// (split.setResizeWeight(0.55) en Swing). El panel de abajo mide lo que mide su
+// contenido (sin scrollbar propia) y la pagina scrollea; solo el alto del
+// calendario es fijo, asi que la referencia del reparto es el alto visible de la
+// ventana, no el del contenedor (que crece con el contenido).
 
 const ALTO_MINIMO_SUPERIOR = 180; // Swing: calendario.setMinimumSize(0, 180)
 const ALTO_MINIMO_INFERIOR = 140;
@@ -20,46 +23,49 @@ export default function SplitVertical({ arriba, abajo }) {
   // redimensionar la ventana (como un JSplitPane ya movido a mano).
   const fijadoRef = useRef(false);
 
-  function altoContenedor() {
+  /**
+   * Alto visible disponible para el split: desde el borde superior del panel
+   * hasta el fondo de la ventana. No se mide el alto del contenedor porque el
+   * panel de abajo crece con su contenido y el calculo se realimentaria.
+   */
+  function altoDisponible() {
     const el = contRef.current;
-    return el ? el.getBoundingClientRect().height : 0;
+    if (!el) return window.innerHeight;
+    const top = Math.max(0, el.getBoundingClientRect().top);
+    return Math.max(0, window.innerHeight - top);
   }
 
   function limitar(valor) {
-    const total = altoContenedor();
-    if (total <= 0) return valor;
-    const maximo = Math.max(ALTO_MINIMO_SUPERIOR, total - ALTO_MINIMO_INFERIOR - ALTO_DIVISOR);
+    const disponible = altoDisponible();
+    if (disponible <= 0) return valor;
+    const maximo = Math.max(ALTO_MINIMO_SUPERIOR, disponible - ALTO_MINIMO_INFERIOR - ALTO_DIVISOR);
     return Math.min(Math.max(ALTO_MINIMO_SUPERIOR, valor), maximo);
   }
 
-  useEffect(() => {
-    const el = contRef.current;
-    if (!el) return undefined;
-    const ajustar = (total) => {
-      if (total <= 0) return;
+  useLayoutEffect(() => {
+    const ajustar = () => {
+      const disponible = altoDisponible();
+      if (disponible <= 0) return;
       setAlto((prev) => {
-        const base = fijadoRef.current && prev != null ? prev : Math.round(total * PESO_INICIAL);
+        const base = fijadoRef.current && prev != null ? prev : Math.round(disponible * PESO_INICIAL);
         return Math.min(
           Math.max(ALTO_MINIMO_SUPERIOR, base),
-          Math.max(ALTO_MINIMO_SUPERIOR, total - ALTO_MINIMO_INFERIOR - ALTO_DIVISOR),
+          Math.max(ALTO_MINIMO_SUPERIOR, disponible - ALTO_MINIMO_INFERIOR - ALTO_DIVISOR),
         );
       });
     };
-    const ro = new ResizeObserver((entries) => {
-      ajustar(entries[0]?.contentRect?.height ?? 0);
-    });
-    ro.observe(el);
-    ajustar(el.getBoundingClientRect().height);
-    return () => ro.disconnect();
+    ajustar();
+    window.addEventListener('resize', ajustar);
+    return () => window.removeEventListener('resize', ajustar);
   }, []);
 
   function iniciarArrastre(e) {
     if (e.button !== 0) return;
     e.preventDefault();
-    const total = altoContenedor();
+    const disponible = altoDisponible();
     arrastreRef.current = {
       y: e.clientY,
-      alto: alto ?? Math.round(total * PESO_INICIAL),
+      alto: alto ?? Math.round(disponible * PESO_INICIAL),
     };
     fijadoRef.current = true;
     setArrastrando(true);
@@ -83,12 +89,12 @@ export default function SplitVertical({ arriba, abajo }) {
   }
 
   function teclaDivisor(e) {
-    const actual = alto ?? Math.round(altoContenedor() * PESO_INICIAL);
+    const actual = alto ?? Math.round(altoDisponible() * PESO_INICIAL);
     let siguiente = null;
     if (e.key === 'ArrowUp') siguiente = actual - PASO_TECLADO;
     else if (e.key === 'ArrowDown') siguiente = actual + PASO_TECLADO;
     else if (e.key === 'Home') siguiente = ALTO_MINIMO_SUPERIOR;
-    else if (e.key === 'End') siguiente = altoContenedor();
+    else if (e.key === 'End') siguiente = altoDisponible();
     if (siguiente == null) return;
     e.preventDefault();
     fijadoRef.current = true;

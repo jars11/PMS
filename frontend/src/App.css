@@ -200,6 +200,9 @@ label {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Ocupa el alto del panel del split: asi solo scrollea la grilla. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .calendario-toolbar {
@@ -231,31 +234,6 @@ label {
   background: var(--panel-2);
   color: var(--texto);
   border: 1px solid var(--borde);
-}
-
-.cal-leyenda {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-left: auto;
-}
-
-.chip {
-  font-size: 0.75rem;
-  padding: 3px 8px;
-  border-radius: 4px;
-}
-
-.cal-libre-chip {
-  background: #123a2b;
-}
-
-.cal-sucia-chip {
-  background: #4a3b18;
-}
-
-.cal-barra-chip {
-  background: #7f1d1d;
 }
 
 .cal-aviso {
@@ -301,8 +279,13 @@ label {
 
 .calendario-scroll {
   /* Paridad con el calendario Swing: sin barra horizontal. La grilla ajusta
-     las noches visibles al ancho del contenedor (nochesVisibles). */
+     las noches visibles al ancho del contenedor (nochesVisibles). La barra
+     vertical es condicional: aparece solo cuando las filas no entran en el
+     alto del panel y se va sola cuando entran. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
+  overflow-y: auto;
   background: var(--panel);
   border-radius: 8px;
 }
@@ -486,11 +469,13 @@ label {
 }
 
 /* Split vertical redimensionable (paridad con el JSplitPane vertical del
-   Swing): calendario arriba, "Propuesta de estadía" abajo. */
+   Swing): calendario arriba, "Propuesta de estadía" abajo. El alto del split
+   lo define su contenido (alto del calendario + divisor + propuesta), asi que
+   el panel de la propuesta nunca tiene scrollbar propia: la pagina scrollea. */
 .split-vertical {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 200px);
+  height: auto;
   min-height: 460px;
   border: 1px solid var(--borde);
   border-radius: 8px;
@@ -499,16 +484,19 @@ label {
 }
 
 .split-arriba {
-  flex: 55 1 0;
+  flex: 0 0 auto;
   min-height: 180px;
-  overflow: auto;
+  /* El scroll vertical vive en .calendario-scroll, no en el panel: la barra de
+     inicio de fecha queda siempre visible. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 8px;
 }
 
 .split-abajo {
-  flex: 45 1 0;
+  flex: 0 0 auto;
   min-height: 140px;
-  overflow: auto;
   padding: 8px;
 }
 

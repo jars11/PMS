@@ -111,7 +111,7 @@ function resumen(propuesta) {
   return `${prefijo}${partes.join(', ')} — total ${formatearMonto(total, bloques[0]?.moneda)}`;
 }
 
-export default function PropuestaEstadia({ titulares = [], onPrevisualizar, onCreada }) {
+export default function PropuestaEstadia({ onPrevisualizar, onCreada }) {
   // Flujo documento primero: se busca el documento del titular y, si no existe,
   // se da de alta con POST /api/titulares al aceptar la propuesta.
   const titular = useTitular();
@@ -259,7 +259,7 @@ export default function PropuestaEstadia({ titulares = [], onPrevisualizar, onCr
       <h2 className="propuesta-titulo">Propuesta de estadía</h2>
 
       <div className="propuesta-titular">
-        <CamposTitular titular={titular} titulares={titulares} />
+        <CamposTitular titular={titular} />
       </div>
 
       <div className="propuesta-bloques">

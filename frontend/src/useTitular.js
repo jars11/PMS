@@ -5,14 +5,6 @@ import { api } from './api';
 export const TIPOS_DOCUMENTO = ['CEDULA', 'DNI', 'PASAPORTE', 'OTRO'];
 export const TIPO_DOCUMENTO_POR_DEFECTO = 'CEDULA';
 
-const DATOS_VACIOS = {
-  nombres: '',
-  apellidos: '',
-  celular: '',
-  telefonoFijo: '',
-  email: '',
-};
-
 /** El backend guarda nombres y apellidos como listas: se parte el texto tipeado. */
 function aLista(texto) {
   return (texto || '').trim().split(/\s+/).filter(Boolean);
@@ -41,8 +33,8 @@ export function useTitular(titularInicial = null) {
   );
   const [numeroDocumento, setNumeroDocumento] = useState(titularInicial?.numeroDocumento ?? '');
   const [datos, setDatos] = useState(() => aDatosDe(titularInicial));
-  // Titular ya registrado: el que devolvió la búsqueda por documento, el elegido
-  // en el selector alternativo o el precargado al editar una reserva.
+  // Titular ya registrado: el que devolvió la búsqueda por documento o el
+  // precargado al editar una reserva.
   const [existente, setExistente] = useState(titularInicial);
   const [consultando, setConsultando] = useState(false);
   const [mensaje, setMensaje] = useState(
@@ -53,7 +45,7 @@ export function useTitular(titularInicial = null) {
   // usuario ya cambió (misma idea que generacionRef en PropuestaEstadia).
   const documentoVigenteRef = useRef((titularInicial?.numeroDocumento ?? '').trim());
 
-  /** Precarga un titular ya conocido (edición o selector alternativo). */
+  /** Precarga un titular ya conocido (búsqueda por documento o edición). */
   function usarExistente(t) {
     if (!t) return;
     documentoVigenteRef.current = (t.numeroDocumento ?? '').trim();
@@ -70,17 +62,6 @@ export function useTitular(titularInicial = null) {
     documentoVigenteRef.current = (valor || '').trim();
     setNumeroDocumento(valor);
     setExistente(null);
-    setMensaje('');
-    setError('');
-  }
-
-  /** Vuelve a "sin titular elegido" (opción vacía del selector alternativo). */
-  function limpiar() {
-    documentoVigenteRef.current = '';
-    setNumeroDocumento('');
-    setTipoDocumento(TIPO_DOCUMENTO_POR_DEFECTO);
-    setExistente(null);
-    setDatos(DATOS_VACIOS);
     setMensaje('');
     setError('');
   }
@@ -171,8 +152,6 @@ export function useTitular(titularInicial = null) {
     mensaje,
     error,
     buscar,
-    usarExistente,
-    limpiar,
     resolverTitularId,
   };
 }

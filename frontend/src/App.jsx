@@ -165,7 +165,6 @@ export default function App() {
           }
           abajo={
             <PropuestaEstadia
-              titulares={titulares}
               onPrevisualizar={setPrevisualizacion}
               onCreada={() => {
                 refrescarReservas();

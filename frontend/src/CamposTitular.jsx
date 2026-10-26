@@ -6,9 +6,9 @@ import { TIPOS_DOCUMENTO } from './useTitular';
  * web "documento primero"): se pide el documento del titular, al salir del campo
  * se busca y, si existe, se autocompletan sus datos y se usa su id; si no
  * existe, se completan nombres/apellidos/celular/email y el alta se hace al
- * guardar. El selector de titulares existentes queda como alternativa.
+ * guardar. No hay selector de titulares existentes.
  */
-export default function CamposTitular({ titular, titulares = [], autoFocusDocumento = false }) {
+export default function CamposTitular({ titular, autoFocusDocumento = false }) {
   const {
     tipoDocumento,
     setTipoDocumento,
@@ -21,12 +21,7 @@ export default function CamposTitular({ titular, titulares = [], autoFocusDocume
     mensaje,
     error,
     buscar,
-    usarExistente,
-    limpiar,
   } = titular;
-
-  const estaEnLista =
-    existente && titulares.some((t) => String(t.id) === String(existente.id));
 
   return (
     <>
@@ -52,31 +47,6 @@ export default function CamposTitular({ titular, titulares = [], autoFocusDocume
           />
         </label>
       </div>
-
-      <label>
-        Titular existente (alternativa)
-        <select
-          value={existente ? String(existente.id) : ''}
-          onChange={(e) => {
-            if (!e.target.value) {
-              limpiar();
-              return;
-            }
-            const elegido = titulares.find((t) => String(t.id) === e.target.value);
-            if (elegido) usarExistente(elegido);
-          }}
-        >
-          <option value="">— buscar por documento —</option>
-          {titulares.map((t) => (
-            <option key={t.id} value={String(t.id)}>
-              {t.nombre}
-            </option>
-          ))}
-          {existente && !estaEnLista && (
-            <option value={String(existente.id)}>{existente.nombre}</option>
-          )}
-        </select>
-      </label>
 
       {consultando && <div className="propuesta-aviso">Buscando titular…</div>}
       {mensaje && <div className="propuesta-aviso">{mensaje}</div>}
