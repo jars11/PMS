@@ -71,6 +71,18 @@ export const api = {
         `&noche=${encodeURIComponent(noche)}`,
     ),
 
+  /**
+   * Compatibilidad de cada habitacion para mover el bloque que cubre
+   * (habitacionOrigenId, noche): `[{habitacionId, motivo}]`, con `motivo` null
+   * cuando la habitacion es compatible. Es la MISMA regla que valida el soltar
+   * (409), asi que el calendario grisea con esto las filas destino.
+   */
+  compatibilidadReserva: (id, habitacionOrigenId, noche) =>
+    request(
+      `/reservas/${id}/compatibilidad?habitacionOrigenId=${encodeURIComponent(habitacionOrigenId)}` +
+        `&noche=${encodeURIComponent(noche)}`,
+    ),
+
   /** Payment-guarded delete: 204 on success, 409 with {mensaje} otherwise. */
   eliminarReserva: (id) => request(`/reservas/${id}`, { method: 'DELETE' }),
 

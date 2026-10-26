@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -30,10 +31,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * REST tests for the calendar context-menu endpoints: the edit prefill read and
- * the payment-guarded delete. Both delegate to {@link ControladorReservas}
- * ({@code edicionDe} / {@code eliminarReserva}); the effects are asserted
- * through that controller's read views as well.
+ * REST tests for the reservation endpoints driven from the web calendar: the
+ * edit prefill read, the payment-guarded delete and the move-compatibility
+ * read the calendar uses to grey out destination rows. All of them delegate to
+ * {@link ControladorReservas} ({@code edicionDe} / {@code eliminarReserva} /
+ * {@code compatibilidadMovimiento}); the effects are asserted through that
+ * controller's read views as well.
  */
 class ReservasEdicionEliminarTest {
 
@@ -186,6 +189,72 @@ class ReservasEdicionEliminarTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(r.getId()))
                 .andExpect(jsonPath("$[0].lateCheckout").value(true));
+    }
+
+    // --------------------------------------- compatibilidad de movimiento
+
+    /**
+     * Una entrada por habitacion, en el orden de la vista (numero). La 102 pide
+     * Vista al mar + Jacuzzi y la 101 solo tiene Balcon: mover ese bloque a la
+     * 101 se rechaza por atributos, aunque el calendario heuristica local no lo
+     * veia (bug de la reserva 17 a la 101).
+     */
+    @Test
+    void compatibilidadDevuelveElMotivoPorHabitacion() throws Exception {
+        long h101 = idHabitacion(101);
+        long h102 = idHabitacion(102);
+        long h103 = idHabitacion(103);
+        Reserva r = crearReserva(102, "2026-11-01", "2026-11-04", 1, 1, 0);
+
+        mockMvc.perform(get("/api/reservas/" + r.getId() + "/compatibilidad")
+                        .param("habitacionOrigenId", String.valueOf(h102))
+                        .param("noche", "2026-11-02"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(6))
+                .andExpect(jsonPath("$[0].habitacionId").value(h101))
+                .andExpect(jsonPath("$[0].motivo").value("ATRIBUTOS_FALTANTES"))
+                // La habitacion del bloque sigue siendo compatible consigo misma.
+                .andExpect(jsonPath("$[1].habitacionId").value(h102))
+                .andExpect(jsonPath("$[1].motivo").value(nullValue()))
+                .andExpect(jsonPath("$[2].habitacionId").value(h103))
+                .andExpect(jsonPath("$[2].motivo").value("ATRIBUTOS_FALTANTES"));
+    }
+
+    @Test
+    void compatibilidadMarcaCapacidadCuandoLasCamasNoAlcanzan() throws Exception {
+        long h101 = idHabitacion(101);
+        long h103 = idHabitacion(103);
+        // 1 matrimonial + 2 individuales no entran en la 101 (1 matrimonial + 1 individual).
+        Reserva r = crearReserva(103, "2026-11-01", "2026-11-04", 1, 2, 0);
+
+        mockMvc.perform(get("/api/reservas/" + r.getId() + "/compatibilidad")
+                        .param("habitacionOrigenId", String.valueOf(h103))
+                        .param("noche", "2026-11-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].habitacionId").value(h101))
+                .andExpect(jsonPath("$[0].motivo").value("CAPACIDAD_INSUFICIENTE"));
+    }
+
+    @Test
+    void compatibilidadNoDevuelveMotivoCuandoLaHabitacionCumple() throws Exception {
+        long h101 = idHabitacion(101);
+        long h103 = idHabitacion(103);
+        Reserva r = crearReserva(101, "2026-11-01", "2026-11-04", 1, 1, 0);
+
+        mockMvc.perform(get("/api/reservas/" + r.getId() + "/compatibilidad")
+                        .param("habitacionOrigenId", String.valueOf(h101))
+                        .param("noche", "2026-11-02"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[2].habitacionId").value(h103))
+                .andExpect(jsonPath("$[2].motivo").value(nullValue()));
+    }
+
+    @Test
+    void compatibilidadDeReservaInexistenteDevuelve404() throws Exception {
+        mockMvc.perform(get("/api/reservas/999999/compatibilidad")
+                        .param("habitacionOrigenId", String.valueOf(idHabitacion(101)))
+                        .param("noche", "2026-11-02"))
+                .andExpect(status().isNotFound());
     }
 
     // --------------------------------------- eliminar

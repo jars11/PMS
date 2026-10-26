@@ -30,7 +30,9 @@ import java.util.Map;
  * list reuses {@code listarReservas()}, create reuses {@code crearReservaPara},
  * edit reuses {@code actualizarReserva} by targeting the reservation's single
  * proposal, the calendar context menu reuses {@code edicionDe} (prefill) and
- * {@code eliminarReserva} (payment-guarded delete).
+ * {@code eliminarReserva} (payment-guarded delete), and the drag of a block
+ * reuses {@code compatibilidadMovimiento} to grey out the destination rooms
+ * with the same rule that rejects the drop.
  */
 @RestController
 @RequestMapping("/api/reservas")
@@ -126,6 +128,21 @@ public class ReservasController {
                                      @RequestParam long habitacionId,
                                      @RequestParam String noche) {
         return ReservaEdicionDto.de(reservas.edicionDe(id, habitacionId, LocalDate.parse(noche)));
+    }
+
+    /**
+     * Compatibilidad de TODAS las habitaciones para mover el bloque que cubre
+     * {@code (habitacionOrigenId, noche)}: el calendario grisea con esto las
+     * filas destino al iniciar el arrastre. Reutiliza {@code
+     * compatibilidadMovimiento}, la misma regla que valida el soltar (409).
+     */
+    @GetMapping("/{id}/compatibilidad")
+    public List<CompatibilidadMovimientoDto> compatibilidad(@PathVariable long id,
+                                                            @RequestParam long habitacionOrigenId,
+                                                            @RequestParam String noche) {
+        return reservas.compatibilidadMovimiento(id, habitacionOrigenId, LocalDate.parse(noche)).stream()
+                .map(CompatibilidadMovimientoDto::de)
+                .toList();
     }
 
     /** Payment-guarded delete: 204 when removed, 409 when it has payments. */

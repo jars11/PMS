@@ -166,6 +166,24 @@ label {
 }
 
 /* Tabla de reservas */
+.reservas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Busqueda por fechas: ingreso, retiro y estadia que intersecta un rango. */
+.reservas-busqueda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.reservas-busqueda input {
+  width: 150px;
+}
+
 .tabla {
   width: 100%;
   border-collapse: collapse;
@@ -184,6 +202,35 @@ label {
 .tabla thead th {
   background: var(--panel-2);
   color: var(--texto-tenue);
+}
+
+/* Header ordenable: el boton ocupa todo el th y no agrega color propio. */
+.tabla th.ordenable {
+  padding: 0;
+}
+
+.tabla-orden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.tabla-orden.activo {
+  color: var(--acento);
+}
+
+.tabla-orden-marca {
+  font-size: 0.7rem;
 }
 
 .tabla tbody tr {
@@ -307,7 +354,10 @@ label {
   background: var(--panel-2);
   color: var(--texto);
   font-weight: 600;
-  box-shadow: 1px 0 0 var(--borde);
+  /* La linea de separacion se pinta HACIA ADENTRO de la columna sticky: con
+     box-shadow exterior (1px 0 0) caia en la primera columna de fechas y
+     cruzaba las barras de reserva que la atraviesan. */
+  box-shadow: inset -1px 0 0 var(--borde);
 }
 
 .cal-sticky-head {
@@ -324,6 +374,18 @@ label {
   height: 34px;
   border-right: 1px solid var(--borde);
   border-bottom: 1px solid var(--borde);
+}
+
+/* Columna del dia de hoy: borde interior sutil. El box-shadow inset se pinta
+   debajo de las barras (position:absolute con z-index propio), asi que el
+   resaltado no tapa ni corre el pintado de la reserva. */
+.cal-celda-hoy {
+  box-shadow: inset 1px 0 0 var(--acento), inset -1px 0 0 var(--acento);
+}
+
+.calendario thead th.cal-celda-hoy {
+  background: #1b3550;
+  color: var(--acento);
 }
 
 .cal-celda-limpia {

@@ -120,9 +120,7 @@ export default function App() {
       <header className="topbar">
         <h1>PMS — Web</h1>
         <div className="topbar-der">
-          <span className="rol">
-            {sesion.rol} {sesion.admin ? '(admin)' : '(recepcionista)'}
-          </span>
+          <span className="rol">{sesion.rol}</span>
           <button className="secundario" onClick={salir}>
             Salir
           </button>
@@ -139,27 +137,26 @@ export default function App() {
         <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => cambiarPestana('lista')}>
           Reservas
         </button>
-        <button
-          className="nueva"
-          onClick={() => {
-            setReservaEnEdicion(null);
-            setPrecarga(null);
-            setPropuestaAbierta(true);
-          }}
-        >
-          + Nueva reserva
-        </button>
+        {/* El alta solo tiene sentido en el calendario: el panel lateral de la
+            propuesta de estadía vive en esa pestaña. */}
+        {pestana === 'calendario' && (
+          <button
+            className="nueva"
+            onClick={() => {
+              setReservaEnEdicion(null);
+              setPrecarga(null);
+              setPropuestaAbierta(true);
+            }}
+          >
+            + Nueva reserva
+          </button>
+        )}
       </nav>
 
       {error && <div className="error banner">{error}</div>}
       {cargando && <div className="cargando">Cargando…</div>}
 
-      {!cargando && pestana === 'lista' && (
-        <ReservasLista
-          reservas={reservas}
-          onEditar={(r) => { setReservaEnEdicion(r); setPrecarga(null); setFormAbierto(true); }}
-        />
-      )}
+      {!cargando && pestana === 'lista' && <ReservasLista reservas={reservas} />}
 
       {!cargando && pestana === 'calendario' && (
         // Calendario a la izquierda y, al abrir "+ Nueva reserva", la propuesta

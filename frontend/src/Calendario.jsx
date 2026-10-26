@@ -411,23 +411,6 @@ function previsualizacionPorFila(m, bloques) {
   return porFila;
 }
 
-function esCompatibleFila(m, fila, bloque) {
-  const hab = m.habitacionDeFila(fila);
-  if (!hab || hab.id == null) return true;
-  const bloques = m.bloquesDeFila(fila);
-  if (
-    bloques.some(
-      (b) => b.reservaId !== bloque.reservaId && b.checkIn < bloque.checkOut && bloque.checkIn < b.checkOut,
-    )
-  ) {
-    return false;
-  }
-  if (bloque.personas > hab.capacidad + hab.colchones) return false;
-  if (bloque.lateCheckout && bloques.some((b) => b.checkIn === bloque.checkOut)) return false;
-  if (!hab.limpia && bloques.some((b) => b.lateCheckout && b.checkOut === bloque.checkIn)) return false;
-  return true;
-}
-
 function bloqueEnPunto(m, fila, col, e, td) {
   if (fila < 0 || col < 1 || col > m.noches || !td) return null;
   const rect = td.getBoundingClientRect();
@@ -558,7 +541,11 @@ function iniciarMovimiento(est, m, fila, columna, bloque) {
   est.filaDestino = -1;
   est.bloqueOrigen = bloque;
   est.reservaOrigenId = bloque.reservaId;
-  est.compatiblePorFila = m.filas.map((_, idx) => esCompatibleFila(m, idx, bloque));
+  // Gris conservador hasta que responda el backend: solo la fila origen es
+  // destino posible. La compatibilidad real la trae
+  // GET /api/reservas/{id}/compatibilidad (atributos, distribucion de camas,
+  // disponibilidad), la MISMA regla que rechaza el soltar con 409.
+  est.compatiblePorFila = m.filas.map((_, idx) => idx === fila);
 }
 
 function seleccionarReserva(est, fila, bloque) {
@@ -1328,6 +1315,43 @@ export default function Calendario({
     e.preventDefault();
   }
 
+  /**
+   * Pide al backend la compatibilidad de cada habitacion para mover el bloque
+   * que acaba de levantarse y grisea las incompatibles. Se usa la misma regla
+   * que valida el soltar (409), asi que el gris y el rechazo no pueden
+   * discrepar: el heuristico local (capacidad + solape) no ve los atributos ni
+   * la distribucion de camas, y dejaba mover reservas que el backend rechaza.
+   */
+  async function pedirCompatibilidad(est, m) {
+    const bloque = est.bloqueOrigen;
+    const hab = est.filaOrigen >= 0 ? m.habitacionDeFila(est.filaOrigen) : null;
+    if (!bloque || bloque.reservaId == null || !hab || hab.id == null || !bloque.checkIn) return;
+    try {
+      const lista = await api.compatibilidadReserva(bloque.reservaId, hab.id, bloque.checkIn);
+      // El movimiento pudo terminar (o ser otro) mientras llegaba la respuesta.
+      if (est.tipo !== 'movimiento' || est.reservaOrigenId !== bloque.reservaId) return;
+      const motivoPorHabitacion = new Map(lista.map((c) => [c.habitacionId, c.motivo]));
+      est.compatiblePorFila = m.filas.map((fila) =>
+        motivoPorHabitacion.has(fila.habitacionId) && motivoPorHabitacion.get(fila.habitacionId) == null,
+      );
+      est.filaDestino = resolverDestino(
+        est.filaHover,
+        est.filaOrigen,
+        m.filas.length,
+        est.compatiblePorFila,
+        (fila) => !!m.habitacionDeFila(fila),
+      );
+      render();
+    } catch (err) {
+      if (est.tipo !== 'movimiento') return;
+      setAviso({
+        tipo: 'error',
+        titulo: 'No se pudo verificar el movimiento',
+        mensaje: err.message,
+      });
+    }
+  }
+
   function manejarMove(e) {
     const m = modeloRef.current;
     if (!m) return;
@@ -1353,6 +1377,7 @@ export default function Calendario({
       const bloque = est.bloquePresion;
       est.bloquePresion = null;
       iniciarMovimiento(est, m, fila, columna, bloque);
+      pedirCompatibilidad(est, m);
       est.filaHover = filaDeEvento(e);
       est.filaDestino = resolverDestino(est.filaHover, est.filaOrigen, m.filas.length, est.compatiblePorFila, (fila) => !!m.habitacionDeFila(fila));
       render();
@@ -1417,6 +1442,9 @@ export default function Calendario({
   const est = estadoRef.current;
   const m = modelo;
   const previewPorFila = previsualizacionPorFila(m, propuestasPreview);
+  // Columna de hoy (se recalcula en cada render para no quedar vieja si la
+  // pestaña queda abierta pasada la medianoche).
+  const hoy = fechaISO(new Date());
 
   const anchoTotal = containerWidth > 0 ? containerWidth : ANCHO_HABITACION + noches * ANCHO_NOCHE_MIN;
   const anchoNocheCalc = anchoNoche(anchoTotal, noches);
@@ -1521,7 +1549,13 @@ export default function Calendario({
     });
 
     return (
-      <td key={fecha} className={`cal-celda ${info.clase}`} data-col={col} data-fila={fila} style={{ width: ancho }}>
+      <td
+        key={fecha}
+        className={`cal-celda ${info.clase}${fecha === hoy ? ' cal-celda-hoy' : ''}`}
+        data-col={col}
+        data-fila={fila}
+        style={{ width: ancho }}
+      >
         {previews}
         {celdas}
         {etiquetas}
@@ -1584,7 +1618,9 @@ export default function Calendario({
               <tr>
                 <th className="cal-sticky cal-sticky-head">Hab.</th>
                 {m.fechas.map((f) => (
-                  <th key={f}>{formatearDia(f)}</th>
+                  <th key={f} className={f === hoy ? 'cal-celda-hoy' : ''}>
+                    {formatearDia(f)}
+                  </th>
                 ))}
               </tr>
             </thead>
