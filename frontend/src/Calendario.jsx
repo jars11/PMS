@@ -340,6 +340,29 @@ function construirModelo(ocupacion, habitaciones, desde, noches) {
   };
 }
 
+/**
+ * Agrupa los bloques de la propuesta previsualizada por fila del calendario,
+ * igual que TablaCalendario.pintarPropuestas: el bloque se ubica por
+ * habitacionId y se pinta en gris sobre las noches [checkIn, checkOut).
+ */
+function previsualizacionPorFila(m, bloques) {
+  const porFila = new Map();
+  if (!m || !bloques || bloques.length === 0) return porFila;
+  const filaPorHabitacion = new Map();
+  for (let fila = 0; fila < m.filas.length; fila++) {
+    const habitacionId = m.filas[fila].habitacionId;
+    if (habitacionId != null) filaPorHabitacion.set(habitacionId, fila);
+  }
+  for (const bloque of bloques) {
+    if (!bloque || !bloque.checkIn || !bloque.checkOut) continue;
+    const fila = filaPorHabitacion.get(bloque.habitacionId);
+    if (fila == null) continue;
+    if (!porFila.has(fila)) porFila.set(fila, []);
+    porFila.get(fila).push(bloque);
+  }
+  return porFila;
+}
+
 function esCompatibleFila(m, fila, bloque) {
   const hab = m.habitacionDeFila(fila);
   if (!hab || hab.id == null) return true;
@@ -581,7 +604,14 @@ function celdaInfo(m, est, fila, col, fecha) {
   return { clase, segments };
 }
 
-export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarReserva, onCambio, refreshSignal = 0 }) {
+export default function Calendario({
+  habitaciones,
+  onNuevaPrecargada,
+  onEditarReserva,
+  onCambio,
+  refreshSignal = 0,
+  propuestasPreview = [],
+}) {
   const contRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
   // Ancho ya medido del contenedor: hasta que no se mide no se sabe cuantas
@@ -1310,6 +1340,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
 
   const est = estadoRef.current;
   const m = modelo;
+  const previewPorFila = previsualizacionPorFila(m, propuestasPreview);
 
   const anchoTotal = containerWidth > 0 ? containerWidth : ANCHO_HABITACION + noches * ANCHO_NOCHE_MIN;
   const anchoNocheCalc = anchoNoche(anchoTotal, noches);
@@ -1378,6 +1409,19 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
     const info = celdaInfo(m, est, fila, col, fecha);
     const ancho = anchoCol(col);
     const etiquetas = [];
+    // Preview gris de la propuesta del asistente (TablaCalendario.pintarPropuestas).
+    const previews = (previewPorFila.get(fila) || []).map((bloque, i) => {
+      const seg = segmento(bloque, fecha);
+      if (!seg) return null;
+      const [x0, x1] = pixeles(seg, ancho);
+      return (
+        <span
+          key={`p${i}`}
+          className="barra barra-propuesta"
+          style={{ left: x0, width: Math.max(0, x1 - x0) }}
+        />
+      );
+    });
     const celdas = info.segments.map((s, i) => {
       const [x0, x1] = pixeles(s, ancho);
       const disp = etiquetaDeSegmento(s);
@@ -1402,6 +1446,7 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
 
     return (
       <td key={fecha} className={`cal-celda ${info.clase}`} data-col={col} data-fila={fila} style={{ width: ancho }}>
+        {previews}
         {celdas}
         {etiquetas}
       </td>

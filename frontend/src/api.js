@@ -69,6 +69,20 @@ export const api = {
   redimensionarReserva: (id, payload) =>
     request(`/reservas/${id}/redimensionar`, { method: 'POST', body: JSON.stringify(payload) }),
 
+  /**
+   * Busca alternativas de habitaciones para los bloques pedidos (seccion
+   * "Propuesta de estadia"). Sin capacidad suficiente devuelve `{propuestas: []}`.
+   */
+  buscarPropuestas: (bloques) =>
+    request('/propuestas/buscar', { method: 'POST', body: JSON.stringify({ bloques }) }),
+
+  /** Persiste la propuesta elegida como reserva real y devuelve `ReservaVistaDto`. */
+  persistirPropuestas: (titularId, bloques) =>
+    request('/propuestas/persistir', {
+      method: 'POST',
+      body: JSON.stringify({ titularId, bloques }),
+    }),
+
   moverReserva: async (id, payload) => {
     const res = await fetch(`${BASE}/reservas/${id}/mover`, {
       method: 'POST',

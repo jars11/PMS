@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import Login from './Login';
 import ReservasLista from './ReservasLista';
 import Calendario from './Calendario';
+import PropuestaEstadia from './PropuestaEstadia';
+import SplitVertical from './SplitVertical';
 import ReservaForm from './ReservaForm';
 import { api } from './api';
 import './App.css';
@@ -18,6 +20,8 @@ export default function App() {
   const [reservaEnEdicion, setReservaEnEdicion] = useState(null);
   const [precarga, setPrecarga] = useState(null);
   const [calendarioVersion, setCalendarioVersion] = useState(0);
+  // Preview gris de la propuesta elegida en el asistente de abajo.
+  const [previsualizacion, setPrevisualizacion] = useState([]);
 
   const cargarDatos = useCallback(async () => {
     setError('');
@@ -57,6 +61,12 @@ export default function App() {
   function salir() {
     localStorage.removeItem('pms.sesion');
     setSesion(null);
+  }
+
+  // El asistente se desmonta al cambiar de pestana: su preview no debe quedar.
+  function cambiarPestana(destino) {
+    if (destino !== 'calendario') setPrevisualizacion([]);
+    setPestana(destino);
   }
 
   async function guardar(reservaOriginal, payload, lateCheckout) {
@@ -107,11 +117,11 @@ export default function App() {
       <nav className="tabs">
         <button
           className={pestana === 'calendario' ? 'activo' : ''}
-          onClick={() => setPestana('calendario')}
+          onClick={() => cambiarPestana('calendario')}
         >
           Calendario
         </button>
-        <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => setPestana('lista')}>
+        <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => cambiarPestana('lista')}>
           Reservas
         </button>
         <button className="nueva" onClick={() => { setReservaEnEdicion(null); setPrecarga(null); setFormAbierto(true); }}>
@@ -130,12 +140,29 @@ export default function App() {
       )}
 
       {!cargando && pestana === 'calendario' && (
-        <Calendario
-          habitaciones={habitaciones}
-          onNuevaPrecargada={(p) => { setReservaEnEdicion(null); setPrecarga(p); setFormAbierto(true); }}
-          onEditarReserva={(r) => { setReservaEnEdicion(r); setPrecarga(null); setFormAbierto(true); }}
-          onCambio={refrescarReservas}
-          refreshSignal={calendarioVersion}
+        // Paridad con RecepcionistaFrame: calendario arriba y "Propuesta de
+        // estadía" abajo, en un split vertical redimensionable.
+        <SplitVertical
+          arriba={
+            <Calendario
+              habitaciones={habitaciones}
+              onNuevaPrecargada={(p) => { setReservaEnEdicion(null); setPrecarga(p); setFormAbierto(true); }}
+              onEditarReserva={(r) => { setReservaEnEdicion(r); setPrecarga(null); setFormAbierto(true); }}
+              onCambio={refrescarReservas}
+              refreshSignal={calendarioVersion}
+              propuestasPreview={previsualizacion}
+            />
+          }
+          abajo={
+            <PropuestaEstadia
+              titulares={titulares}
+              onPrevisualizar={setPrevisualizacion}
+              onCreada={() => {
+                refrescarReservas();
+                setCalendarioVersion((v) => v + 1);
+              }}
+            />
+          }
         />
       )}
 

@@ -391,6 +391,13 @@ label {
   opacity: 0.85;
 }
 
+/* Preview gris de la propuesta elegida en "Propuesta de estadía": mismo color
+   que TablaCalendario.COLOR_PROPUESTA (0x9E9E9E con alpha 165/255). */
+.barra-propuesta {
+  background: rgba(158, 158, 158, 0.65);
+  pointer-events: none;
+}
+
 .barra-fantasma {
   background: #e57373;
   opacity: 0.6;
@@ -476,6 +483,199 @@ label {
 .cal-menu-item:hover {
   background: #1d4ed8;
   color: #fff;
+}
+
+/* Split vertical redimensionable (paridad con el JSplitPane vertical del
+   Swing): calendario arriba, "Propuesta de estadía" abajo. */
+.split-vertical {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 200px);
+  min-height: 460px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.split-arriba {
+  flex: 55 1 0;
+  min-height: 180px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.split-abajo {
+  flex: 45 1 0;
+  min-height: 140px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.split-divisor {
+  flex: 0 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border-top: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.split-divisor:hover,
+.split-divisor.arrastrando,
+.split-divisor:focus-visible {
+  background: #3b4a63;
+}
+
+.split-divisor:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: -2px;
+}
+
+.split-divisor-grip {
+  width: 46px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--texto-tenue);
+  opacity: 0.7;
+}
+
+/* Seccion "Propuesta de estadía" (paridad con PanelPropuestaEstadia). */
+.propuesta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.propuesta-titulo {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.propuesta h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--texto-tenue);
+}
+
+.propuesta-titular {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.propuesta input:disabled {
+  opacity: 0.5;
+}
+
+.propuesta-bloques {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.propuesta-bloques-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.propuesta-bloque {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.propuesta-atributos {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.propuesta-atributos legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--texto-tenue);
+}
+
+.propuesta-bloque-acciones {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.propuesta-lista-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.propuesta-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.propuesta-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  color: var(--texto);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.propuesta-item input {
+  width: auto;
+  margin: 0;
+}
+
+.propuesta-item.activo {
+  border-color: var(--acento);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.propuesta-aviso {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0c2f4a;
+  font-size: 0.85rem;
+}
+
+.propuesta-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.propuesta-estado {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--texto-tenue);
 }
 
 /* Formulario modal */
