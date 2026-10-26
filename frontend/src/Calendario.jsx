@@ -1283,13 +1283,15 @@ export default function Calendario({ habitaciones, onNuevaPrecargada, onEditarRe
       if (col === colIni && colIni >= 1 && colIni <= m.noches) {
         const seg = segmento(sel, fecha);
         const [x0] = pixeles(seg, ancho);
-        handleInicio = { left: x0, width: Math.min(ANCHO_PLACA, ancho - x0) };
+        // Placa de ancho fijo (igual que el check-out), aunque se salga bordeando la celda.
+        handleInicio = { left: x0, width: ANCHO_PLACA };
       }
       if (col === colFin && colFin >= 1 && colFin <= m.noches) {
         const seg = segmento(sel, fecha);
         const [, x1] = pixeles(seg, ancho);
-        const w = Math.min(ANCHO_PLACA, x1);
-        handleFin = { left: x1 - w, width: w };
+        // Mismo ancho fijo que el check-in: la placa entra en la celda anterior
+        // (la última noche de esta misma reserva), como en Swing.
+        handleFin = { left: x1 - ANCHO_PLACA, width: ANCHO_PLACA };
       }
     }
 
