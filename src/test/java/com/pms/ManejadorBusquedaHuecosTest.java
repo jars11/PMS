@@ -95,6 +95,27 @@ class ManejadorBusquedaHuecosTest {
         assertEquals(101, rp.getHabitacion().getNumero().intValue());
     }
 
+    /**
+     * Las camas de la propuesta son las PEDIDAS (un subconjunto de las de la
+     * habitacion), no todas las camas del cuarto. La cantidad de personas se
+     * deriva de esas camas.
+     */
+    @Test
+    void laPropuestaUsaLasCamasPedidasYNoTodasLasDeLaHabitacion() {
+        habitacion(101, Set.of(), 3, 3, 0, 0, 1000f);
+        InteraccionGuion inter = new InteraccionGuion();
+
+        Set<Set<RHPropuesta>> res = new ManejadorBusquedaHuecos()
+                .buscarHuecos(Set.of(solicitud(Set.of(), 1, 1)), inter);
+
+        RHPropuesta rp = unica(res);
+        assertEquals(1, rp.getCamasMatrimoniales(), "solo la cama matrimonial pedida");
+        assertEquals(1, rp.getCamasIndividuales(), "solo la cama individual pedida");
+        assertEquals(3, rp.getCantPersonas(), "el conteo de personas es el pedido");
+        assertEquals(3, RHPropuesta.personasDerivadas(
+                rp.getCamasMatrimoniales(), rp.getCamasIndividuales()));
+    }
+
     @Test
     void capacidadTotalInsuficienteConColchonesOfreceYUsaColchones() {
         // capacidad 2, con 2 colchones llega a 4; se piden 4 personas
@@ -237,6 +258,67 @@ class ManejadorBusquedaHuecosTest {
         assertFalse(inter.preguntas.isEmpty());
         assertTrue(inter.preguntas.get(0).toLowerCase().contains("atributos"), inter.preguntas.get(0));
         assertEquals(2, res.size(), "tras relajar, dos coberturas maximales");
+    }
+
+    /**
+     * Caso real: tres matrimonios (6 personas) para una noche en habitaciones de
+     * 2 matrimoniales + 2 individuales. Se debe ofrecer relajar la distribucion y
+     * encontrar 201/202/203, sin excepcion.
+     */
+    @Test
+    void tresMatrimoniosRelajanDistribucionYEncuentranHabitacion() {
+        habitacion(201, Set.of(), 2, 2, 0, 0, 2600f);
+        habitacion(202, Set.of(), 2, 2, 0, 0, 2400f);
+        habitacion(203, Set.of(), 2, 2, 0, 0, 2300f);
+        LocalDate dia = LocalDate.of(2026, 10, 22);
+        DTRHSolicitada s = new DTRHSolicitada(dia, dia.plusDays(1), Set.of(), 3, 0, 0, 0);
+        InteraccionGuion inter = new InteraccionGuion(true);
+
+        Set<Set<RHPropuesta>> res = new ManejadorBusquedaHuecos()
+                .buscarHuecos(Set.of(s), inter);
+
+        assertFalse(res.isEmpty(), "deberia encontrar 201/202/203. preguntas="
+                + inter.preguntas + " notifs=" + inter.notificaciones);
+        RHPropuesta rp = res.iterator().next().iterator().next();
+        assertEquals(203, rp.getHabitacion().getNumero().intValue(),
+                "203 es la mas barata de las tres");
+        assertEquals(3, rp.getCantMatrimonios());
+        assertEquals(6, rp.getCantPersonas(), "tres parejas son seis personas");
+        assertEquals(2, rp.getCamasMatrimoniales());
+        assertEquals(2, rp.getCamasIndividuales());
+    }
+
+    /**
+     * Dos bloques DISTINTOS de un matrimonio cada uno para la misma noche deben
+     * conservarse como dos solicitudes y ocupar dos habitaciones.
+     */
+    @Test
+    void dosBloquesIgualesDeUnMatrimonioOcupanDosHabitaciones() {
+        habitacion(201, Set.of(), 2, 2, 0, 0, 2600f);
+        habitacion(202, Set.of(), 2, 2, 0, 0, 2400f);
+        habitacion(203, Set.of(), 2, 2, 0, 0, 2300f);
+        LocalDate dia = LocalDate.of(2026, 10, 22);
+        DTRHSolicitada a = new DTRHSolicitada(dia, dia.plusDays(1), Set.of(), 1, 0, 0, 0);
+        DTRHSolicitada b = new DTRHSolicitada(dia, dia.plusDays(1), Set.of(), 1, 0, 0, 0);
+        InteraccionGuion inter = new InteraccionGuion();
+        assertTrue(ControladorHabitaciones.getInstance().habitacionesLibresEnNoche(dia).size() >= 2,
+                "deberia haber al menos dos habitaciones libres esa noche");
+
+        Set<Set<RHPropuesta>> res = new ManejadorBusquedaHuecos()
+                .buscarHuecos(List.of(a, b), inter);
+
+        assertFalse(res.isEmpty(), "deberia encontrar dos habitaciones. preguntas="
+                + inter.preguntas + " notifs=" + inter.notificaciones);
+        assertEquals(1, res.size(), "debe quedar una sola propuesta (la mas barata)");
+        Set<RHPropuesta> conjunto = res.iterator().next();
+        assertEquals(2, conjunto.size(),
+                "cada bloque debe quedar en una habitacion distinta");
+        Set<Integer> numeros = conjunto.stream()
+                .map(p -> p.getHabitacion().getNumero())
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(Set.of(202, 203), numeros, "202+203 es el par mas barato");
+        float total = (float) conjunto.stream().mapToDouble(RHPropuesta::getSubtotal).sum();
+        assertEquals(4700.0f, total, 0.001f, "1 noche x (2400 + 2300)");
     }
 
     private boolean contieneHabitacion(Set<Set<RHPropuesta>> resultado, int numero) {

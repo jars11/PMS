@@ -20,6 +20,8 @@ public final class GeometriaBarra {
     public static final double INSET_CHECKOUT_NORMAL = 0.25;
     /** Right bound of the departing tail on the check-out day (late check-out). */
     public static final double INSET_CHECKOUT_LATE = 0.75;
+    /** Pixel gap applied on every shared edge between two adjacent stay bars. */
+    public static final int SEPARACION_PX = 2;
 
     private GeometriaBarra() {
     }
@@ -50,5 +52,34 @@ public final class GeometriaBarra {
             return new Segmento(0.0, 1.0);
         }
         return null;
+    }
+
+    /**
+     * Pixel bounds {@code [x0,x1]} of {@code seg} inside a cell {@code ancho}
+     * pixels wide. The {@link #SEPARACION_PX} gap is applied only on the sides
+     * where the bar continues into a neighbor: a head ({@code x0 > 0}) moves
+     * right so check-in bars do not touch the previous checkout tail, and a tail
+     * ({@code x1 < 1}) moves left so the next check-in leaves a visible gap.
+     * Interior segments ({@code [0,1]}) are untouched. Clamped to the cell, with
+     * {@code x1 >= x0}, so narrow cells never produce negative rectangles.
+     */
+    public static int[] pixeles(Segmento seg, int ancho) {
+        if (seg == null || ancho <= 0) {
+            return new int[]{0, 0};
+        }
+        int x0 = (int) Math.round(seg.x0() * ancho);
+        int x1 = (int) Math.round(seg.x1() * ancho);
+        if (seg.x0() > 0) {
+            x0 += SEPARACION_PX;
+        }
+        if (seg.x1() < 1) {
+            x1 -= SEPARACION_PX;
+        }
+        x0 = Math.max(0, Math.min(ancho, x0));
+        x1 = Math.max(0, Math.min(ancho, x1));
+        if (x1 < x0) {
+            x1 = x0;
+        }
+        return new int[]{x0, x1};
     }
 }

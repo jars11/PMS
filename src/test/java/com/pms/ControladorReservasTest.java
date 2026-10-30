@@ -505,6 +505,7 @@ class ControladorReservasTest {
         ControladorReservas.EdicionReserva ed = cr.edicionDe(original.getId(), h103,
                 LocalDate.of(2026, 11, 3));
         assertEquals("Maria Perez", ed.titular());
+        assertEquals(maria.getId(), ed.titularId());
         assertEquals(LocalDate.of(2026, 11, 2), ed.checkIn());
         assertEquals(LocalDate.of(2026, 11, 6), ed.checkOut());
         assertEquals(2, ed.camasMatrimoniales());
@@ -760,12 +761,13 @@ class ControladorReservasTest {
         assertEquals(0, pCantidad.getCunas());
         assertEquals(3600.0f, pCantidad.getSubtotal(), 0.001f); // 2 noches x 1800
 
-        // Los bebes suman a la capacidad: 1 matrimonial + 2 bebes (4 pax) -> 103.
+        // Los bebes NO consumen capacidad de camas: 1 matrimonial alcanza y
+        // se elige la habitacion mas chica con Balcon (101).
         Reserva conBebes = cr.crearReservaAutomatica(titular,
                 LocalDate.of(2026, 12, 8), LocalDate.of(2026, 12, 10),
                 1, 0, 2, 0, Set.of(AtributoHabitacion.Balcon));
-        assertEquals(103, conBebes.getRHPropuestas().iterator().next().getHabitacion().getNumero().intValue());
-        assertEquals(3600.0f, conBebes.getMontoTotal(), 0.001f); // 2 noches x 1800
+        assertEquals(101, conBebes.getRHPropuestas().iterator().next().getHabitacion().getNumero().intValue());
+        assertEquals(3000.0f, conBebes.getMontoTotal(), 0.001f); // 2 noches x 1500
     }
 
     @Test

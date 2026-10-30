@@ -1,4 +1,4 @@
-package com.pms.ui;
+package com.pms.handlers;
 
 import com.pms.handlers.ManejadorAtributosHabs;
 import com.pms.utils.AtributoHabitacion;

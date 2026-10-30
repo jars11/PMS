@@ -39,7 +39,8 @@ public class ManejadorDisponibilidad {
             DTDistribucionCamas dc = distCamas.iterator().next();
             camasMatrimoniales = dc.getCamasMatrimoniales();
             camasIndividuales = dc.getCamasIndividuales();
-            cunas = dc.getCunas();
+            // Las cunas son un recurso y no pueden superar a los bebes.
+            cunas = Math.min(dc.getCunas(), dtrhs.getCantBebes());
         }
 
         resultado.add(new DTRHPropuesta(dtrhs.getFechaInicio(), dtrhs.getFechaFin(),

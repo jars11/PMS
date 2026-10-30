@@ -1,0 +1,896 @@
+:root {
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --panel-2: #273449;
+  --texto: #e2e8f0;
+  --texto-tenue: #94a3b8;
+  --acento: #38bdf8;
+  --peligro: #f87171;
+  --borde: #334155;
+  --exito: #34d399;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--texto);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--acento);
+  color: #082f49;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secundario {
+  background: var(--panel-2);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+}
+
+input,
+select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--borde);
+  background: #0b1220;
+  color: var(--texto);
+  font-family: inherit;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--texto-tenue);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px 40px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.topbar-der {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rol {
+  color: var(--texto-tenue);
+  font-size: 0.9rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0;
+}
+
+.tabs button {
+  background: var(--panel-2);
+  color: var(--texto);
+}
+
+.tabs button.activo {
+  background: var(--acento);
+  color: #082f49;
+}
+
+.tabs button.nueva {
+  margin-left: auto;
+  background: var(--exito);
+  color: #062f22;
+}
+
+/* Login */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: var(--panel);
+  padding: 32px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-card h1 {
+  margin: 0;
+  text-align: center;
+}
+
+.login-hint {
+  color: var(--texto-tenue);
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0;
+}
+
+.error {
+  color: var(--peligro);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.error.banner {
+  padding: 10px;
+  background: #450a0a;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+.cargando {
+  color: var(--texto-tenue);
+  padding: 24px;
+  text-align: center;
+}
+
+/* Tabla de reservas */
+.reservas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Busqueda por fechas: ingreso, retiro y estadia que intersecta un rango. */
+.reservas-busqueda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.reservas-busqueda input {
+  width: 150px;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabla th,
+.tabla td {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.tabla thead th {
+  background: var(--panel-2);
+  color: var(--texto-tenue);
+}
+
+/* Header ordenable: el boton ocupa todo el th y no agrega color propio. */
+.tabla th.ordenable {
+  padding: 0;
+}
+
+.tabla-orden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.tabla-orden.activo {
+  color: var(--acento);
+}
+
+.tabla-orden-marca {
+  font-size: 0.7rem;
+}
+
+.tabla tbody tr {
+  border-top: 1px solid var(--borde);
+}
+
+.tabla .vacio {
+  text-align: center;
+  color: var(--texto-tenue);
+}
+
+/* Calendario */
+.calendario-contenedor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Ocupa el alto del panel del split: asi solo scrollea la grilla. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.calendario-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cal-inicio-label {
+  font-size: 0.85rem;
+  color: var(--texto-tenue);
+}
+
+.cal-fecha {
+  width: 130px;
+  padding: 6px 8px;
+}
+
+.cal-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.cal-aviso-error {
+  background: #450a0a;
+  color: var(--peligro);
+}
+
+.cal-aviso-info {
+  background: #0c2f4a;
+  color: var(--texto);
+}
+
+.cal-aviso-texto {
+  flex: 1;
+}
+
+.cal-aviso-motivo {
+  opacity: 0.8;
+}
+
+.cal-aviso-detalle {
+  margin-top: 4px;
+  color: var(--texto-tenue);
+}
+
+.cal-aviso-cerrar {
+  background: transparent;
+  color: inherit;
+  border: none;
+  font-size: 1rem;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.calendario-scroll {
+  /* Paridad con el calendario Swing: sin barra horizontal. La grilla ajusta
+     las noches visibles al ancho del contenedor (nochesVisibles). La barra
+     vertical es condicional: aparece solo cuando las filas no entran en el
+     alto del panel y se va sola cuando entran. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: 8px;
+}
+
+.calendario {
+  border-collapse: collapse;
+  table-layout: fixed;
+  user-select: none;
+  touch-action: none;
+}
+
+.calendario th,
+.calendario td {
+  padding: 0;
+  text-align: center;
+  overflow: visible;
+}
+
+.calendario thead th {
+  height: 28px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--texto-tenue);
+  background: var(--panel-2);
+  border-right: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+}
+
+.cal-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--panel-2);
+  color: var(--texto);
+  font-weight: 600;
+  /* La linea de separacion se pinta HACIA ADENTRO de la columna sticky: con
+     box-shadow exterior (1px 0 0) caia en la primera columna de fechas y
+     cruzaba las barras de reserva que la atraviesan. */
+  box-shadow: inset -1px 0 0 var(--borde);
+}
+
+.cal-sticky-head {
+  z-index: 5;
+}
+
+.cal-habitacion {
+  height: 34px;
+  font-size: 0.8rem;
+}
+
+.cal-celda {
+  position: relative;
+  height: 34px;
+  border-right: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+}
+
+/* Columna del dia de hoy: borde interior sutil. El box-shadow inset se pinta
+   debajo de las barras (position:absolute con z-index propio), asi que el
+   resaltado no tapa ni corre el pintado de la reserva. */
+.cal-celda-hoy {
+  box-shadow: inset 1px 0 0 var(--acento), inset -1px 0 0 var(--acento);
+}
+
+.calendario thead th.cal-celda-hoy {
+  background: #1b3550;
+  color: var(--acento);
+}
+
+.cal-celda-limpia {
+  background: #123a2b;
+}
+
+.cal-celda-sucia {
+  background: #3f3417;
+}
+
+.cal-celda-gris {
+  background: #3a3f47;
+}
+
+.cal-celda-seleccion {
+  background: #1d4ed8;
+}
+
+.barra {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  background: #e57373;
+  border-radius: 2px;
+  /* Por encima de la columna sticky (z-index 2) para que su borde no cruce la barra. */
+  z-index: 3;
+}
+
+.barra-gris {
+  background: #9aa0a6;
+}
+
+.barra-preview {
+  background: #e57373;
+  opacity: 0.85;
+}
+
+/* Preview gris de la propuesta elegida en "Propuesta de estadía": mismo color
+   que TablaCalendario.COLOR_PROPUESTA (0x9E9E9E con alpha 165/255). */
+.barra-propuesta {
+  background: rgba(158, 158, 158, 0.65);
+  pointer-events: none;
+}
+
+.barra-fantasma {
+  background: #e57373;
+  opacity: 0.6;
+}
+
+/* Etiqueta "Titular — 2👤 + 👶" pintada sobre la barra (igual que Swing). */
+.barra-etiqueta {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  overflow: hidden;
+  pointer-events: none;
+  /* Por encima de las barras (z-index 3) para que el texto no quede tapado. */
+  z-index: 4;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: #331a1a;
+  white-space: nowrap;
+}
+
+.barra-etiqueta-texto {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+/* Tarjeta de informacion de la reserva bajo el mouse (paridad con Swing:
+   TablaCalendario.htmlReserva). Sigue al cursor y nunca es un blanco de eventos,
+   asi que no interfiere con crear/mover/redimensionar. */
+.cal-tooltip {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 280px;
+  padding: 5px 8px;
+  border: 1px solid #8c8c8c;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #222;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.cal-tooltip-titulo {
+  font-weight: 700;
+}
+
+/* Menu contextual del calendario (click derecho), paridad con JPopupMenu. */
+.cal-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 184px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--texto);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.cal-menu-item {
+  padding: 7px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.cal-menu-item:hover {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+/* Layout del calendario con panel lateral derecho deslizante: el calendario
+   ocupa todo el ancho y, al abrir la propuesta, el panel se desliza de derecha
+   a izquierda y lo achica/arrincona a la izquierda. La propuesta ya no va
+   debajo del calendario. */
+.calendario-layout {
+  --ancho-propuesta: clamp(340px, 34vw, 440px);
+  display: flex;
+  align-items: stretch;
+  height: clamp(420px, 70vh, 760px);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.calendario-zona {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  overflow: hidden;
+}
+
+/* El contenido del panel tiene ancho fijo y se ancla a la derecha: al crecer el
+   panel desde 0 el contenido se revela desde el borde derecho (deslizamiento). */
+.propuesta-panel {
+  flex: 0 0 auto;
+  width: 0;
+  display: flex;
+  justify-content: flex-end;
+  overflow: hidden;
+  opacity: 0;
+  border-left: 0 solid var(--borde);
+  transition:
+    width 0.28s ease,
+    border-left-width 0.28s ease,
+    opacity 0.18s ease;
+}
+
+.calendario-layout.con-panel .propuesta-panel {
+  width: var(--ancho-propuesta);
+  opacity: 1;
+  border-left-width: 1px;
+}
+
+.propuesta-panel-inner {
+  flex: 0 0 auto;
+  width: var(--ancho-propuesta);
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* Split vertical redimensionable (paridad con el JSplitPane vertical del
+   Swing): calendario arriba, "Propuesta de estadía" abajo. El alto del split
+   lo define su contenido (alto del calendario + divisor + propuesta), asi que
+   el panel de la propuesta nunca tiene scrollbar propia: la pagina scrollea. */
+.split-vertical {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 460px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.split-arriba {
+  flex: 0 0 auto;
+  min-height: 180px;
+  /* El scroll vertical vive en .calendario-scroll, no en el panel: la barra de
+     inicio de fecha queda siempre visible. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.split-abajo {
+  flex: 0 0 auto;
+  min-height: 140px;
+  padding: 8px;
+}
+
+.split-divisor {
+  flex: 0 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border-top: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.split-divisor:hover,
+.split-divisor.arrastrando,
+.split-divisor:focus-visible {
+  background: #3b4a63;
+}
+
+.split-divisor:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: -2px;
+}
+
+.split-divisor-grip {
+  width: 46px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--texto-tenue);
+  opacity: 0.7;
+}
+
+/* Seccion "Propuesta de estadía" (paridad con PanelPropuestaEstadia). */
+.propuesta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.propuesta-titulo {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.propuesta-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.propuesta-cerrar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--texto-tenue);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.propuesta-cerrar:hover {
+  color: var(--texto);
+  border-color: var(--texto-tenue);
+}
+
+.propuesta h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--texto-tenue);
+}
+
+/* Datos del titular: se piden recién al confirmar la reserva. */
+.propuesta-titular {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+/* En el panel angosto las filas del titular se apilan si no entran. */
+.propuesta-titular .fila {
+  flex-wrap: wrap;
+}
+
+.propuesta-titular .fila label {
+  min-width: 140px;
+}
+
+.propuesta input:disabled {
+  opacity: 0.5;
+}
+
+.propuesta-bloques {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.propuesta-bloques-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.propuesta-bloque {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.propuesta-bloque-numero {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--texto-tenue);
+  padding-right: 28px;
+}
+
+/* Cruz para quitar el bloque, en la esquina superior derecha del bloque. */
+.propuesta-bloque-quitar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--texto-tenue);
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.propuesta-bloque-quitar:hover:not(:disabled) {
+  background: #450a0a;
+  color: var(--peligro);
+  border-color: var(--peligro);
+}
+
+.propuesta-atributos {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.propuesta-atributos legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--texto-tenue);
+}
+
+.propuesta-lista-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.propuesta-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.propuesta-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  color: var(--texto);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.propuesta-item input {
+  width: auto;
+  margin: 0;
+}
+
+.propuesta-item.activo {
+  border-color: var(--acento);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.propuesta-aviso {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0c2f4a;
+  font-size: 0.85rem;
+}
+
+.propuesta-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.propuesta-estado {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--texto-tenue);
+}
+
+/* Formulario modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.form-card {
+  background: var(--panel);
+  padding: 24px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.form-card h2 {
+  margin: 0;
+}
+
+.fila {
+  display: flex;
+  gap: 12px;
+}
+
+.fila label {
+  flex: 1;
+}
+
+/* Checkbox en linea (p. ej. "Late check-out"), a diferencia de los campos
+   apilados del resto del formulario. */
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto);
+  font-size: 0.9rem;
+}
+
+label.check input {
+  width: auto;
+  margin: 0;
+}
+
+.acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

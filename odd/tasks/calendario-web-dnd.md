@@ -1,0 +1,101 @@
+# Calendario web: drag & drop completo (paridad con Swing)
+
+Replicar en el frontend React el calendario nocturno del Swing con drag & drop completo: crear reservas arrastrando sobre noches libres, mover reservas entre habitaciones y redimensionar con flechas, con navegación por fecha de inicio y barras de ocupación contiguas. Reutilizar la lógica de negocio existente (ControladorReservas) sin reescribirla, exponiéndola por REST.
+
+## Specs
+
+- S1. `el drag & drop para crear reservas no funciona. Haz que el calendario se vea bien y funcione correctamente como estaba antes en java swing`
+- S2. Alcance elegido por el usuario: calendario completo = crear por drag + mover reservas + redimensionar con flechas + navegación por fecha de inicio.
+- S3. Crear por drag: press sobre una noche libre arranca una selección de rango (misma habitación). Un click sin arrastre no crea nada. Arrastrar a otra columna pinta un preview fantasma. Al soltar, si el rango cruza una noche ocupada se muestra "El rango cruza una noche ocupada. Elegí noches libres." y no se crea nada; si está libre se abre el formulario de alta precargado con habitación, checkIn y checkOut. El rango es half-open [checkIn, checkOut): las columnas seleccionadas son check-in y check-out INCLUSIVAS (la columna de check-out es el día de salida, no una noche más).
+- S4. Mover por drag: press sobre una noche ocupada de una reserva arranca, al superar el umbral de arrastre, un movimiento del bloque clickeado. Las filas incompatibles se pintan en gris y no cuentan como destino. Soltar sobre una fila compatible llama a moverReserva; un rechazo muestra el mensaje exacto y el motivo; soltar sin destino cancela en silencio. Click simple (sin arrastre) selecciona la reserva.
+- S5. Redimensionar: al seleccionar una reserva se muestran flechas en cada extremo visible (check-in: alargar/atrás y acortar/adelante; check-out: acortar/atrás y alargar/adelante). Arrastrar una flecha extiende o acorta la estadía, clampeada contra la primera noche ocupada y contra el borde de la ventana; acortar deja al menos una noche. Al soltar llama a redimensionarReserva.
+- S6. Navegación: selector de fecha de inicio (dd/MM/yyyy) + botón refrescar. La cantidad de noches visibles se adapta al ancho disponible (default 14).
+- S7. Pintado de barras contiguas: la barra cubre del día de check-in al día de check-out INCLUSIVE. Check-in con inset 25% a la izquierda; cola de check-out al 25% (o 75% con late check-out) en el día de salida; segmentos interiores [0,1]; separación de 2px en bordes compartidos. La ocupación real es half-open [checkIn, checkOut).
+- S8. Backend REST reutiliza ControladorReservas sin reimplementar: ocupación (matrizOcupacion), mover (moverReserva), redimensionar (redimensionarReserva), late-checkout (hayLateCheckoutElDia). No se toca Swing ni se rompen los tests existentes.
+- S9. `Quiero todo igual a como estaba en java swing` — paridad visual/funcional restante del calendario Swing (tooltip de hover, menú contextual, toggle de late check-out, navegación Shift+rueda). El formato de etiqueta de barras (titular + personas/bebés) ya se replicó en L9. Nota: Swing no tiene doble click para editar; no se agrega.
+
+## Contrato REST (fijo)
+
+### GET /api/calendario?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+200 → lista de habitaciones ordenadas por número:
+```json
+[
+  {
+    "habitacionId": 1,
+    "numero": 101,
+    "bloques": [
+      {
+        "reservaId": 6,
+        "checkIn": "2027-01-10",
+        "checkOut": "2027-01-15",
+        "lateCheckout": false,
+        "titular": "Agustin Rivero",
+        "personas": 2,
+        "bebes": 0,
+        "estado": "PendienteDePago"
+      }
+    ]
+  }
+]
+```
+`checkIn` = propuesta.fechaInicio; `checkOut` = propuesta.fechaFin (día de salida, para pintar la cola). Noches ocupadas = [checkIn, checkOut). Solo reservas activas.
+
+### POST /api/reservas/{id}/mover
+Body: `{"habitacionOrigenId": 1, "noche": "2027-01-12", "habitacionDestinoId": 3}`
+200 → `{"movida": true}`. Rechazo (sin mutar): 409 → `{"mensaje": "...", "motivo": "CAPACIDAD_INSUFICIENTE"}`.
+
+### POST /api/reservas/{id}/redimensionar
+Body: `{"habitacionId": 1, "noche": "2027-01-12", "nuevoCheckIn": "2027-01-10", "nuevoCheckOut": "2027-01-18"}`
+200 → `ReservaVistaDto`. Errores: 400 (fechas inválidas) / 409 (habitación ocupada) → `{"mensaje": ...}`.
+
+### GET /api/calendario/late-checkout?habitacionId=1&dia=YYYY-MM-DD
+200 → `{"hayLateCheckout": true}`.
+
+## Tasks
+
+- T1 [S8] Backend REST: DTOs de ocupación/mover/redimensionar + los 4 endpoints reutilizando ControladorReservas. Tests REST (ocupación con bloques, mover ok/rechazo, redimensionar ok/rechazo, late-checkout). Ruta: inline. Commit: feat(api): calendar occupancy, move and resize endpoints.
+- T2 [S1,S3,S6,S7] Frontend calendario: grilla habitaciones × noches, barras contiguas (GeometriaBarra), selector de fecha de inicio + refrescar, drag para crear con preview y validación de rango libre. Ruta: writer. Commit: a8e9874 (fusionado con T3).
+- T3 [S4,S5] Frontend: selección de reserva con flechas, drag para mover (filas incompatibles en gris), drag para redimensionar. Ruta: writer. Commit: a8e9874 (fusionado con T2).
+- T4 [S1] Verificación end-to-end: mvn test verde, build frontend, pasada manual en ego-lite (crear, seleccionar, barras). Ruta: inline. Commit: (ninguno; cierra la feature).
+- T5 [S9] Tooltip al pasar el mouse sobre una reserva: titular, fechas, estado, personas/bebés, subtotal (paridad con TablaCalendario). Ruta: writer. Commit: 4d10f9d.
+- T6 [S9] Menú contextual con click derecho: editar reserva y alta en una noche libre (paridad con CalendarioPanel.mostrarMenu). Ruta: writer. Commit: 96547ec.
+- T7 [S9] Toggle de late check-out por reserva. Ruta: writer. Commit: 5b7769c.
+- T8 [S9] Navegación Shift+rueda día a día (Swing no tiene doble click). Ruta: writer. Commit: b9f1063.
+- T9 [S10] Calendario como pestaña inicial al entrar como recepcionista. Ruta: writer. Commit: b86e1b8.
+- T10 [S11] Quitar la barra de scroll horizontal del calendario (ajustar noches al ancho). Ruta: writer. Commit: b86e1b8.
+- T11 [S12] Corregir el fallo gráfico al cambiar Reservas -> Calendario. Ruta: writer. Commit: b86e1b8.
+- T12a [S13] Backend: `POST /api/propuestas/buscar` (buscarHuecos con interacción no interactiva) y `POST /api/propuestas/persistir` (persistirPropuestas). Ruta: writer. Commit: 9d6ae3a.
+- T12b [S13] Frontend: panel de formulario de bloques (fechas, camas, atributos) + split vertical redimensionable debajo del calendario. Ruta: writer. Commit: 66715ad.
+- T12c [S13] Frontend: lista de propuestas, previsualización en gris sobre el calendario y "Aceptar y crear reserva". Ruta: writer. Commit: 66715ad.
+- T12d [S13] Backend: endpoint REST de alta de titulares (para soportar el "nuevo titular" del panel). Ruta: writer. Commit: 02bd4d2.
+- T13 [S14] Documento en el titular (heredado de Persona) + autocompletado por documento en el alta de reserva (documento primero). Ruta: writer. Commit: 02bd4d2.
+- T16 [S17] Columna de hoy resaltada; sin botón Editar en Reservas; orden asc/desc por columna; búsqueda por fecha (ingresa/retira/intersecta) con funciones puras; '+ Nueva reserva' solo en Calendario; header sin paréntesis; borde sticky corregido; compatibilidad REAL del backend para grisar filas al mover. Ruta: writer. Commit: 0c4f58a.
+- T15 [S16] Rediseño de la propuesta: quitar refrescar; check-in mantenido al agregar bloque; bloques arriba; cruz × por bloque; panel lateral derecho deslizante al clickear Nueva reserva (achica el calendario); sin datos de titular en la propuesta (se piden al confirmar). Ruta: writer. Commit: cdd12b9.
+- T14 [S15] Tooltip de habitación + limpieza de UI: panel de propuesta sin scrollbar, calendario con scroll vertical condicional, divisor movible, página con scroll general; sin selector de titular existente (solo documento → autocompletar/crear); sin leyenda Libre/Sucia/Ocupada. Ruta: writer. Commit: 780d12c.
+
+## Log
+
+- L1. `el drag & drop para crear reservas no funciona. Haz que el calendario se vea bien y funcione correctamente como estaba antes en java swing`
+- L2. Decisión de alcance (usuario eligió): calendario completo — crear + mover + redimensionar + navegación.
+- L3. Fix previo no relacionado: App.css no se importaba (interfaz en blanco y negro), corregido en App.jsx.
+- L4. T1 backend completado: endpoints de ocupación/mover/redimensionar/late-checkout + DTOs + tests REST (83f20d2). `mvn test` = 328 tests, 0 fallos.
+- L5. T2+T3 frontend implementados por writer en un solo commit cohesivo (a8e9874): Calendario.jsx reescrito (máquina de estados RANGO/MOVIMIENTO/REDIMENSION), barras contiguas, navegación, drag crear/mover/redimensionar. `npm run build` y `npm run lint` verdes.
+- L6. T4 verificación end-to-end en ego-lite: grilla + barras pintadas (101..203), drag para crear abre el formulario precargado (habitación 201, check-in/check-out correctos), click selecciona reserva y muestra las flechas de redimensionar. Backend mover/redimensionar cubiertos por tests REST.
+- L7. Revisión RDD: slice frontend (`a8e9874`) aprobado (lineage `review-854747b5e3343d68`). Slice backend (rango desde `e8d2f43`, lineage `review-d4b9bdd9af4b021c`): 3 reviewers + refuter corrieron; el refuter marcó **R4-1 CRITICAL** (`recargar()` perdía la selección tras move/resize, sin guard in-flight, fila destino sin re-validar). Corrección aplicada en `frontend/src/Calendario.jsx` (36 líneas de diff): preservar selección tras recargar, `enVueloRef`, validación de fila destino. Build verde. Bloqueo: el *correction plan* capture se rechaza como `stale` (inconsistencia `authority.revision` 2ac2542a… vs `expected-revision` 454c6a4e… del correction request); el review del backend queda en `correction_required`.
+- L8. Bug reportado: al abrir el diálogo de nueva reserva, las barras del calendario se pintaban por arriba. Causa: `.modal-backdrop` sin `z-index` (auto) vs barras `z-index: 1` y sticky `z-index: 5`. Fix: `z-index: 100` en `.modal-backdrop` (App.css). Verificado en navegador: modal z-index 100 > barras 1 / sticky 5, el form-card recibe el click.
+- L9. Etiquetas de barras (pedido del usuario): se replica el formato de Swing (`EtiquetaReserva`): `Titular — 2👤 + 👶`, conteo reservado primero, nombre truncado con `…`, pintado sobre el rango (cada celda pinta su trozo con el texto desplazado y clip por celda), color `#331a1a`, `pointer-events: none`. Verificado en navegador: `Agustin Rivero — 3👤`, `Ag… 2👤`. Build/lint verdes (fc9abbc).
+- L10. Pedido del usuario: `Quiero todo igual a como estaba en java swing`. La etiqueta de barras ya quedó (L9). Quedan pendientes T5-T8: tooltip de hover, menú contextual (click derecho), toggle de late check-out, y Shift+rueda / doble click para editar. Al retomar: leer este documento hasta `## Log`, reconciliar y continuar por T5.
+- L11. T5 completado (4d10f9d): tooltip de reserva con el contenido de Swing (`Reserva #id`, Titular, Habitación, Check-in/out `dd/MM/yyyy`, Noches, Personas · Bebés, Subtotal `USD` es-UY, Estado, Late check-out: sí). Backend: `BloqueOcupacionDto` expone `subtotal`/`moneda` (+ test `ocupacionIncluyeSubtotalYMonedaDelBloque`). Verificado en navegador: `Subtotal: USD 6.000,00`. `mvn -Dtest=CalendarioControllerTest` 7 verdes; build/lint verdes. Backend reiniciado (job-5) para servir el DTO nuevo. Siguiente: T6 (menú contextual).
+- L12. T6 completado (96547ec): menú contextual (click derecho) con 3 acciones. Backend: `EdicionReserva` + `titularId`; `GET /api/reservas/{id}/edicion` (prefill) y `DELETE /api/reservas/{id}` (204 / 409 con `No se puede eliminar: la reserva tiene pagos asociados.`); test `ReservasEdicionEliminarTest` (5). Frontend: `api.edicionReserva`/`eliminarReserva`, menú (Editar/Eliminar sobre reserva; Nueva reserva aquí sobre libre), `ReservaForm` precarga titularId+camas. Verificado en navegador: `[Editar reserva, Eliminar reserva]` y `[Nueva reserva aquí]`. `mvn test` 334 verdes; build/lint verdes. Siguiente: T7 (toggle late check-out).
+- L13. T7 completado (5b7769c): toggle `Late check-out` en el form de reserva (checkbox), precargado en edición; al guardar aplica la regla de Swing (alta: solo si marcado; edición: siempre); 409 → avisa y destilda sin revertir la reserva. Backend: `POST /api/reservas/{id}/late-checkout` + `ReservaVistaDto.lateCheckout` (aditivo); tests. Verificado en navegador: checkbox presente y marcado en edición. `mvn test` 337 verdes; build/lint verdes. Siguiente: T8 (Shift+rueda / doble click).
+- L14. T8 completado (b9f1063): Shift+rueda navega la fecha de inicio día a día (arriba=anterior, abajo=siguiente), con listener nativo no-passive (React registra `wheel` como passive). Swing no tiene doble click, así que no se agregó. Verificado en navegador: `20/10 → 21/10 → 20/10`. build/lint verdes. **Cierra la paridad S9 (T5–T8).**
+- L15. Ajuste pedido: las placas de las flechas de redimensionar (check-in y check-out) tienen el mismo ancho fijo (ANCHO_PLACA = 18px); la del check-out entra en la celda anterior (última noche de la misma reserva), como Swing. Verificado en navegador: inicio 18px, fin 18px (antes el fin ~15px). build/lint verdes.
+- L16. UX de redimensionar cambiada (pedido del usuario): se eliminan los handles visibles (`.handle-placa`/`.handle-flecha`). El rango se redimensiona por hover + drag sobre el borde real (franja de 9px) de la barra, sin click/selección previa; cursor `ew-resize` al hover y durante el drag (detección `extremoEnPunto`). Verificado en navegador: 0 handles, cursor `ew-resize`. build/lint verdes; harness de la función 17/17 y diferencial de helpers compartidos sin cambios.
+- L17. Pedido del usuario (verbatim): `el calendario debería de ser lo primero que aparece al entrar como recepcionista. Tampoco debería haber una barra horizontal debajo en el calendario. Al cliquear reservas y luego calendario hay un fallo gráfico en el calendario. Recuerda hacer todo como estaba en swing. En swing por ejemplo había una sección para colocar la reserva automáticamente debajo del calendario que se podía ajustar el tamaño y deslizar en las habitaciones si se acotaba el espacio`. En Swing, RecepcionistaFrame pone Calendario primero y debajo PanelPropuestaEstadia en un JSplitPane vertical redimensionable (split.setResizeWeight(0.55), oneTouchExpandable).
+- L18. T9–T11 completados (b86e1b8): pestaña inicial Calendario (y orden Calendario primero); sin scroll horizontal (`overflow-x: hidden`, noches ajustadas al ancho, `scrollWidth == clientWidth`); fix del render al cambiar Reservas→Calendario (medición síncrona `useLayoutEffect` + rAF y guard `medido` antes del primer fetch). Verificado en navegador. build/lint verdes. Siguiente: T12 (sección "Propuesta de estadía").
+- L19. T12a completado (9d6ae3a): `PropuestasController` con `POST /api/propuestas/buscar` (reutiliza `ManejadorBusquedaHuecos.buscarHuecos` con una `InteraccionUsuario` no interactiva) y `POST /api/propuestas/persistir` (reutiliza `persistirPropuestas`); DTOs anidados; 14 tests REST. `mvn test` 351 verdes. Siguiente: T12b (panel frontend con split redimensionable).
+- L20. T12b/T12c completados (66715ad): panel `PropuestaEstadia` bajo el calendario en `SplitVertical` (divisor arrastrable, mínimos, 55/45), con titular (existente / opción nuevo titular), filas de bloques (fechas, camas, atributos), "Buscar propuestas", lista de propuestas, preview en gris sobre el calendario y "Aceptar y crear reserva". Verificado en navegador: búsqueda devuelve `1 habitación: N° 101 (USD 1.500,00)`. build/lint verdes. Limitación: el alta de titular NUEVO no se puede persistir (falta endpoint REST de alta de titulares) → T12d pendiente.
+- L21. T12d + documento del titular completados (02bd4d2). Pedido verbatim: `haz que el documento lo tenga la clase persona en vez de la clase pasajero, para que el titular también la tenga por herencia. Entonces al pedir el documento del titular en la reserva (que debe ser lo primero que se pide), el programa autocomplete los datos en caso de tenerlos`. `Persona` ya tenía `numeroDocumento`/`tipoDocumento`; ahora `TitularReserva` los setea, `ControladorPersonas.altaTitular` recibe documento + `buscarTitularPorDocumento`, `RepositorioPersonas.findTitularPorDocumento`, `TitularesController` (`POST /api/titulares`, `GET /api/titulares/buscar`), `TitularVistaDto` con documento/contacto. Frontend: `useTitular` + `CamposTitular`; `ReservaForm` y `PropuestaEstadia` piden el documento primero y autocompletan. Verificado en navegador: doc `99911122` → `Maria Lopez` / `091111111` / `maria@example.com`. `mvn test` 358 verdes; build/lint verdes.
+- L22. T14 completado (780d12c). Pedido verbatim: `Recuerda que al pasar el mouse por una casilla de habitación debe mostrar las características de la misma (otra cosa que estaba en swing y acá no). Mejor prueba hacer que no haya barra deslizadora en propuesta de estadía. Solo que haya una barra movible entre el calendario y propuesta, una barra deslizadora vertical en calendario solo si está muy pequeño, y una en general como ya existe. Quita lo de seleccionar titular existente. Que simplemente autocomplete los datos a partir del documento si los tiene. Quita lo de limpia sucia ocupada en el calendario arriba a la derecha`. Tooltip de habitación verificado en navegador: `Habitación 101 / Camas: 1 matrimonial(es), 1 individual(es) / Cunas: 0 · Colchones: 0 · Capacidad: 3 / Atributos: Balcón / Estado: limpia`. Panel sin scrollbar, leyenda eliminada, form con documento y sin selector de titular. build/lint verdes.
+- L23. T15 completado (cdd12b9). Pedido verbatim: `Quita el botón de refrescar. Al agregar bloques en propuesta de estadía no aumentes el check-in, mantenlo. Haz que los bloques se agreguen arriba no abajo. Quita el botón quitar bloque y cámbialo por una cruz en la esquina del bloque. Quiero probar que la propuesta de estadía no esté abajo del calendario sino que aparezca al clickear nueva reserva que sea algo que se deslice de derecha a izquierda y arrincone o achique el calendario, para que se visualice bien qué espacio ocuparía en el calendario la propuesta y que se vea junto con lo pedido a la derecha. También no quiero que haya que llenar los datos del titular para crear una propuesta de reserva. Solo una vez confirmada la propuesta ahí sí pedir datos del titular`. Verificado en navegador: panel 0→431px y calendario 1067→636px al abrir; check-in `26/10` mantenido al agregar bloque (nuevo arriba); sin campo de documento en la propuesta. build/lint verdes.
+- L24. T16 completado (0c4f58a). Pedido verbatim: `Resalta la columna del día de hoy en el calendario. En la sección de reservas quita el botón de editar. Además ordena por orden ascendente las reservas al clickear el campo correspondiente en la tabla, y de forma descendente al darle un segundo click. También que se pueda buscar por fecha de check-in y de checkout. Como por ejemplo: ingresa en tal fecha, o se retira en tal fecha o estadía intersecta con intervalo (fecha 1, fecha 2). Escribe los métodos de búsqueda de forma simple. Quita el botón de nueva reserva en la sección reservas. Quita el paréntesis al lado de RECEPCIONISTA, (si con admin está igual, también quitalo allí). Hay un problema visual con la linea derecha de la columna del primer día, pasa por encima de las reservas, corrigelo. No entiendo por qué no puedo mover por ejemplo reserva 17 a la 101 si visualmente me lo permite (no es una fila en gris)`. Verificado en navegador: columna de hoy (9 celdas), 0 botones Editar, '+ Nueva reserva' solo en Calendario, 6 headers ordenables, 4 inputs de fecha, header sin paréntesis; `GET /api/reservas/17/compatibilidad` → 101 = `ATRIBUTOS_FALTANTES` (ahora se pinta gris). `mvn test` 362 verdes; build/lint verdes.

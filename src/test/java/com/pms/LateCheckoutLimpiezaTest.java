@@ -200,4 +200,55 @@ class LateCheckoutLimpiezaTest {
         assertNotNull(nueva.getId());
         assertEquals(7, cr.getReservas().size());
     }
+
+    // ------------------------------- WU4: late checkout day read + same-day guard
+
+    @Test
+    void hayLateCheckoutElDiaSoloEnLaFechaDeCheckout() {
+        long id103 = idHabitacion(103);
+        Reserva previa = cr.crearReservaPara(altaTitular(), id103, INI, FIN, 1, 1, 0);
+        marcarLateCheckout(previa.getId());
+
+        assertTrue(cr.hayLateCheckoutElDia(id103, FIN), "true en el dia de salida");
+        assertFalse(cr.hayLateCheckoutElDia(id103, FIN.minusDays(1)), "false el dia previo");
+        assertFalse(cr.hayLateCheckoutElDia(id103, FIN.plusDays(1)), "false el dia siguiente");
+        assertFalse(cr.hayLateCheckoutElDia(idHabitacion(101), FIN), "false en otra habitacion");
+    }
+
+    @Test
+    void marcarLateCheckoutRechazaCuandoOtraReservaHaceCheckInElMismoDia() {
+        long id103 = idHabitacion(103);
+        TitularReserva titular = altaTitular();
+        Reserva previa = cr.crearReservaPara(titular, id103, INI, FIN, 1, 1, 0);
+        cr.crearReservaPara(titular, id103, FIN, FIN.plusDays(2), 1, 0, 0);
+
+        assertThrows(IllegalStateException.class,
+                () -> cr.marcarLateCheckout(previa.getId(), true),
+                "no se puede marcar late check-out con un check-in el mismo dia");
+
+        assertFalse(cargarReserva(previa.getId()).isLateCheckout(), "el flag no cambia");
+    }
+
+    @Test
+    void marcarLateCheckoutPermiteCuandoNoHayCheckInElMismoDia() {
+        long id103 = idHabitacion(103);
+        Reserva previa = cr.crearReservaPara(altaTitular(), id103, INI, FIN, 1, 1, 0);
+
+        cr.marcarLateCheckout(previa.getId(), true);
+
+        assertTrue(cargarReserva(previa.getId()).isLateCheckout(), "el flag se persiste");
+    }
+
+    @Test
+    void marcarLateCheckoutFalseSiempreSePermite() {
+        long id103 = idHabitacion(103);
+        TitularReserva titular = altaTitular();
+        Reserva previa = cr.crearReservaPara(titular, id103, INI, FIN, 1, 1, 0);
+        marcarLateCheckout(previa.getId()); // true directo, sin pasar por la validacion
+        cr.crearReservaPara(titular, id103, FIN, FIN.plusDays(2), 1, 0, 0); // check-in el mismo dia
+
+        cr.marcarLateCheckout(previa.getId(), false);
+
+        assertFalse(cargarReserva(previa.getId()).isLateCheckout(), "destildar siempre se permite");
+    }
 }

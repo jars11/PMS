@@ -47,22 +47,42 @@ class SeleccionCalendarioTest {
                 List.of(new OcupacionHabitacion(h101, Set.of(noche))));
     }
 
+    /**
+     * Fila unica con la celda de check-out de la columna 4 ocupada (simula el
+     * check-in del proximo huesped); las columnas 2 y 3 estan libres.
+     */
+    private static CalendarioOcupacionModel modeloConCheckOutOcupado() {
+        Habitacion h101 = new Habitacion(101, Set.of(), 1, 2, 0, 0);
+        LocalDate noche = INICIO.plusDays(3); // columna 4 (dia de check-out de la estadia 2..4)
+        return new CalendarioOcupacionModel(INICIO, NOCHES,
+                List.of(new OcupacionHabitacion(h101, Set.of(noche), Map.of(noche, 77L))));
+    }
+
     @Test
-    void rangoDeUnaNoche() {
+    void rangoDeUnaNocheUsaDosColumnasInclusivas() {
         CalendarioOcupacionModel m = modeloLibre();
 
-        SeleccionCalendario.Rango r = SeleccionCalendario.rango(m, 2, 2);
+        // Columna 2 = check-in, columna 3 = check-out (una noche).
+        SeleccionCalendario.Rango r = SeleccionCalendario.rango(m, 2, 3);
 
         assertEquals(new SeleccionCalendario.Rango(INICIO.plusDays(1), INICIO.plusDays(2)), r);
+    }
+
+    @Test
+    void unaSolaColumnaNoEsUnRangoValido() {
+        CalendarioOcupacionModel m = modeloLibre();
+
+        assertNull(SeleccionCalendario.rango(m, 2, 2), "hace falta check-in y check-out distintos");
     }
 
     @Test
     void rangoDeDragMultiNoche() {
         CalendarioOcupacionModel m = modeloLibre();
 
+        // Columnas 1..3: check-in el dia 1, check-out el dia 3 (dos noches).
         SeleccionCalendario.Rango r = SeleccionCalendario.rango(m, 1, 3);
 
-        assertEquals(new SeleccionCalendario.Rango(INICIO, INICIO.plusDays(3)), r);
+        assertEquals(new SeleccionCalendario.Rango(INICIO, INICIO.plusDays(2)), r);
     }
 
     @Test
@@ -79,8 +99,8 @@ class SeleccionCalendarioTest {
         assertNull(SeleccionCalendario.rango(m, 0, 0), "solo columna 0");
         assertNull(SeleccionCalendario.rango(m, NOCHES + 1, NOCHES + 2), "todo fuera de ventana");
 
-        // Clamp parcial: un extremo fuera de ventana se recorta a la ultima noche.
-        assertEquals(new SeleccionCalendario.Rango(INICIO.plusDays(3), INICIO.plusDays(NOCHES)),
+        // Clamp parcial: un extremo fuera de ventana se recorta a la ultima columna.
+        assertEquals(new SeleccionCalendario.Rango(INICIO.plusDays(3), INICIO.plusDays(NOCHES - 1)),
                 SeleccionCalendario.rango(m, 4, 99));
     }
 
@@ -97,7 +117,25 @@ class SeleccionCalendarioTest {
         CalendarioOcupacionModel m = modeloConOcupada();
 
         assertFalse(SeleccionCalendario.esRangoLibre(m, 0, 2, 4), "cruza la noche ocupada");
-        assertFalse(SeleccionCalendario.esRangoLibre(m, 0, 3, 3), "ancla en la noche ocupada");
+        assertFalse(SeleccionCalendario.esRangoLibre(m, 0, 3, 4), "la noche 3 esta ocupada");
+    }
+
+    @Test
+    void esRangoLibreIgnoraLaCeldaDeCheckOutOcupada() {
+        CalendarioOcupacionModel m = modeloConCheckOutOcupado();
+
+        assertTrue(m.estaOcupada(0, 4), "precondicion: el check-out lo ocupa el proximo huesped");
+        assertTrue(SeleccionCalendario.esRangoLibre(m, 0, 2, 4),
+                "las noches 2 y 3 estan libres; la celda de check-out no bloquea");
+    }
+
+    @Test
+    void esRangoLibreFalseCuandoUnaNocheInteriorEstaOcupada() {
+        CalendarioOcupacionModel m = modeloConOcupada();
+
+        assertTrue(m.estaOcupada(0, 3), "precondicion: la noche 3 esta ocupada");
+        assertFalse(SeleccionCalendario.esRangoLibre(m, 0, 2, 4),
+                "la noche 3 cae dentro del rango y lo bloquea");
     }
 
     @Test

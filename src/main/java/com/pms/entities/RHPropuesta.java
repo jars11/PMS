@@ -23,7 +23,8 @@ import java.util.TreeSet;
 
 /**
  * Proposed room-stay for one block of the reservation: fixed dates, a concrete
- * room, the night rates and the bed distribution.
+ * room, the night rates, the physical bed/crib allocation and the people
+ * categories (couples, individual persons and babies).
  */
 @Entity
 @Table(name = "rhpropuesta")
@@ -62,6 +63,30 @@ public class RHPropuesta {
 
     private int cunas;
 
+    // Bebes pedidos para el bloque. default 0 para que hbm2ddl update pueda
+    // agregar la columna a una tabla existente. Las CUNAS son un recurso de la
+    // habitacion: puede haber menos cunas que bebes (un bebe puede dormir con
+    // los padres).
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int cantBebes;
+
+    // Personas pedidas para el bloque. Las CAMAS son el subconjunto de camas de
+    // la habitacion que se usan, pero no definen el conteo: una matrimonial
+    // puede ser usada por una sola persona y una habitacion puede ofrecer mas
+    // camas que personas. default 0 para que hbm2ddl update agregue la columna;
+    // las filas viejas caen al calculo por camas.
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int cantPersonas;
+
+    // Desglose de las personas por categoria. Es la fuente nueva del conteo:
+    // cada matrimonio/pareja son 2 personas y cada persona individual es 1.
+    // Se guarda tambien cantPersonas por compatibilidad con filas viejas.
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int cantMatrimonios;
+
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int cantPersonasIndividuales;
+
     protected RHPropuesta() {
     }
 
@@ -69,6 +94,57 @@ public class RHPropuesta {
                        Set<AtributoHabitacion> atributosHabitacion,
                        float subtotal, TipoMoneda moneda,
                        int camasMatrimoniales, int camasIndividuales, int cunas) {
+        this(fechaInicio, fechaFin, atributosHabitacion, subtotal, moneda,
+                camasMatrimoniales, camasIndividuales, cunas,
+                camasMatrimoniales, camasIndividuales, 0);
+    }
+
+    public RHPropuesta(LocalDate fechaInicio, LocalDate fechaFin,
+                       Set<AtributoHabitacion> atributosHabitacion,
+                       float subtotal, TipoMoneda moneda,
+                       int camasMatrimoniales, int camasIndividuales, int cunas, int cantBebes) {
+        this(fechaInicio, fechaFin, atributosHabitacion, subtotal, moneda,
+                camasMatrimoniales, camasIndividuales, cunas,
+                camasMatrimoniales, camasIndividuales, cantBebes);
+    }
+
+    /**
+     * Constructor legacy: conserva el total de personas pedido sin desglose.
+     * El desglose (parejas / individuales) queda en 0 y se deriva de las camas
+     * cuando haga falta.
+     */
+    public RHPropuesta(LocalDate fechaInicio, LocalDate fechaFin,
+                       Set<AtributoHabitacion> atributosHabitacion,
+                       float subtotal, TipoMoneda moneda,
+                       int camasMatrimoniales, int camasIndividuales, int cunas,
+                       int cantBebes, int cantPersonas) {
+        inicializar(fechaInicio, fechaFin, atributosHabitacion, subtotal, moneda,
+                camasMatrimoniales, camasIndividuales, cunas, 0, 0, cantBebes,
+                cantPersonas);
+    }
+
+    /**
+     * Constructor nuevo: las camas y cunas son los recursos usados y el conteo
+     * de personas viene desglosado en parejas/matrimonios + personas
+     * individuales. El total de personas se deriva de ese desglose.
+     */
+    public RHPropuesta(LocalDate fechaInicio, LocalDate fechaFin,
+                       Set<AtributoHabitacion> atributosHabitacion,
+                       float subtotal, TipoMoneda moneda,
+                       int camasMatrimoniales, int camasIndividuales, int cunas,
+                       int cantMatrimonios, int cantPersonasIndividuales, int cantBebes) {
+        inicializar(fechaInicio, fechaFin, atributosHabitacion, subtotal, moneda,
+                camasMatrimoniales, camasIndividuales, cunas, cantMatrimonios,
+                cantPersonasIndividuales, cantBebes,
+                personasDeCategorias(cantMatrimonios, cantPersonasIndividuales));
+    }
+
+    private void inicializar(LocalDate fechaInicio, LocalDate fechaFin,
+                             Set<AtributoHabitacion> atributosHabitacion,
+                             float subtotal, TipoMoneda moneda,
+                             int camasMatrimoniales, int camasIndividuales, int cunas,
+                             int cantMatrimonios, int cantPersonasIndividuales,
+                             int cantBebes, int cantPersonas) {
         this.fechaInicio = fechaInicio;
         this.fechaFin = fechaFin;
         this.atributosHabitacion = new TreeSet<>(atributosHabitacion != null ? atributosHabitacion : Set.of());
@@ -77,6 +153,20 @@ public class RHPropuesta {
         this.camasMatrimoniales = camasMatrimoniales;
         this.camasIndividuales = camasIndividuales;
         this.cunas = cunas;
+        this.cantBebes = cantBebes;
+        this.cantPersonas = cantPersonas;
+        this.cantMatrimonios = cantMatrimonios;
+        this.cantPersonasIndividuales = cantPersonasIndividuales;
+    }
+
+    /** Total de personas a partir del desglose por categoria. */
+    public static int personasDeCategorias(int cantMatrimonios, int cantPersonasIndividuales) {
+        return 2 * cantMatrimonios + cantPersonasIndividuales;
+    }
+
+    /** Personas implicadas por la distribucion de camas (misma regla del dominio). */
+    public static int personasDerivadas(int camasMatrimoniales, int camasIndividuales) {
+        return 2 * camasMatrimoniales + camasIndividuales;
     }
 
     public Long getId() {
@@ -129,5 +219,37 @@ public class RHPropuesta {
 
     public int getCunas() {
         return cunas;
+    }
+
+    public int getCantBebes() {
+        return cantBebes;
+    }
+
+    public void setCantBebes(int cantBebes) {
+        this.cantBebes = cantBebes;
+    }
+
+    public int getCantPersonas() {
+        return cantPersonas;
+    }
+
+    public void setCantPersonas(int cantPersonas) {
+        this.cantPersonas = cantPersonas;
+    }
+
+    public int getCantMatrimonios() {
+        return cantMatrimonios;
+    }
+
+    public void setCantMatrimonios(int cantMatrimonios) {
+        this.cantMatrimonios = cantMatrimonios;
+    }
+
+    public int getCantPersonasIndividuales() {
+        return cantPersonasIndividuales;
+    }
+
+    public void setCantPersonasIndividuales(int cantPersonasIndividuales) {
+        this.cantPersonasIndividuales = cantPersonasIndividuales;
     }
 }

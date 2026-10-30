@@ -12,14 +12,15 @@ import java.util.function.IntFunction;
 /**
  * Renderer del calendario. Pinta, por celda, el fondo de la habitacion (limpia
  * o sucia), la barra contigua de la estadia usando la geometria fraccionaria de
- * {@link GeometriaBarra}, la cola del dia de salida, el borde de traspaso, el
- * gris de las habitaciones incompatibles durante un movimiento y el preview
- * gris sobre la fila valida apuntada.
+ * {@link GeometriaBarra}, la cola del dia de salida, el gris de las
+ * habitaciones incompatibles durante un movimiento y la reserva movida pintada
+ * en su color original sobre la fila apuntada (el origen se levanta apenas el
+ * cursor abandona la fila).
  *
- * <p>La contiguedad se logra porque el segmento {@code x1=1.0} llega al borde
- * derecho de la celda y el {@code x0=0.0} de la vecina al borde izquierdo, con
- * separacion entre celdas cero. El estado del arrastre se inyecta como
- * {@link EstadoArrastre} y la compatibilidad por fila como
+ * <p>Las barras de dias contiguos se dibujan con una separacion de
+ * {@link GeometriaBarra#SEPARACION_PX} pixeles en los bordes compartidos, para
+ * que dos estadias consecutivas no se lean como una sola. El estado del arrastre
+ * se inyecta como {@link EstadoArrastre} y la compatibilidad por fila como
  * {@code IntFunction<Boolean>}, asi el renderer no conoce al panel.
  */
 public final class RendererOcupacion extends DefaultTableCellRenderer {
@@ -31,8 +32,6 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
     private static final Color FONDO_SELECCION = new Color(0x9E, 0xC5, 0xFF);
     private static final Color COLOR_BARRA = new Color(0xE5, 0x73, 0x73);
     private static final Color COLOR_BARRA_GRIS = new Color(0xB5, 0xB5, 0xB5);
-    private static final Color COLOR_PREVIEW = new Color(0xBD, 0xBD, 0xBD, 180);
-    private static final Color COLOR_BORDE_TURNOVER = new Color(0x9E, 0x9E, 0x9E);
     private static final Color COLOR_GRILLA = new Color(0xC0, 0xC0, 0xC0);
 
     private static final int MARGEN_VERTICAL = 4;
@@ -46,7 +45,6 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
     private GeometriaBarra.Segmento segmentoTail;
     private GeometriaBarra.Segmento segmentoPreview;
     private GeometriaBarra.Segmento segmentoCreacion;
-    private boolean bordeTurnover;
     private boolean filaGris;
 
     public RendererOcupacion(EstadoArrastre estado, IntFunction<Boolean> esCompatible) {
@@ -66,7 +64,6 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
         segmentoTail = null;
         segmentoPreview = null;
         segmentoCreacion = null;
-        bordeTurnover = false;
         filaGris = false;
 
         boolean enMovimiento = estado.esMovimiento();
@@ -88,12 +85,6 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
 
         setText("");
 
-        if (isSelected) {
-            componente.setBackground(FONDO_SELECCION);
-            componente.setForeground(table.getForeground());
-            return componente;
-        }
-
         boolean seleccionRango = estado.esCeldaSeleccionada(row, column);
 
         if (seleccionRango) {
@@ -112,28 +103,44 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
             if (fecha == null) {
                 return componente;
             }
+            boolean redimension = estado.esRedimension() && row == estado.filaSeleccionada();
+            // Mientras el cursor esta fuera de su fila, la reserva movida se
+            // levanta del origen: sus segmentos no se pintan ahi. Durante una
+            // redimension se levanta la barra vieja y se pinta el rango nuevo.
+            Long ignorar = null;
+            if (enMovimiento && row == estado.filaOrigen() && estado.ocultarBloqueOrigen()) {
+                ignorar = estado.reservaOrigenId();
+            } else if (redimension) {
+                ignorar = estado.reservaSeleccionadaId();
+            }
+
             if (seleccionRango) {
                 // Barra fantasma de la creacion en curso (rango en arrastre).
-                int min = Math.min(estado.colIni(), estado.colFin());
-                int max = Math.max(estado.colIni(), estado.colFin());
-                LocalDate fechaIni = modelo.fechaDeColumna(min);
-                LocalDate fechaMax = modelo.fechaDeColumna(max);
-                LocalDate fechaFin = fechaMax == null ? null : fechaMax.plusDays(1);
-                segmentoCreacion = estado.previewCreacion(row, column, fecha, fechaIni, fechaFin);
-            } else {
-                // El gate de compatibilidad del preview vive en EstadoArrastre:
-                // una fila incompatible devuelve null, asi que se pinta la barra real.
-                GeometriaBarra.Segmento preview = row == estado.filaHover()
-                        ? estado.previewSegmento(fecha, compatible)
-                        : null;
-                if (preview != null) {
-                    segmentoPreview = preview;
-                } else {
-                    segmentoTail = modelo.segmentoSalidaEn(row, column);
-                    segmentoHead = modelo.segmentoEn(row, column);
-                    bordeTurnover = segmentoTail != null && segmentoHead != null;
-                    filaGris = gris;
+                // La ultima columna resaltada ES el dia de check-out.
+                int selIni = estado.seleccionIni();
+                int selFin = estado.seleccionFin();
+                if (selIni >= 1 && selFin >= 1) {
+                    LocalDate fechaIni = modelo.fechaDeColumna(selIni);
+                    LocalDate fechaFin = modelo.fechaDeColumna(selFin);
+                    if (fechaIni != null && fechaFin != null) {
+                        segmentoCreacion = estado.previewCreacion(row, column, fecha, fechaIni, fechaFin);
+                    }
                 }
+            }
+            // La celda de check-out puede estar compartida con el proximo
+            // huesped: se siguen pintando las barras reales.
+            segmentoTail = modelo.segmentoSalidaEnIgnorando(row, column, ignorar);
+            segmentoHead = modelo.segmentoEnIgnorando(row, column, ignorar);
+            filaGris = gris;
+
+            // La reserva movida se pinta en su color original sobre la fila
+            // DESTINO resuelta (la permitida mas cercana), que puede no ser la
+            // fila bajo el cursor si esa fila es gris.
+            if (row == estado.filaDestino()) {
+                segmentoPreview = estado.previewSegmento(fecha);
+            }
+            if (redimension) {
+                segmentoPreview = estado.previewRedimensionSegmento(fecha);
             }
         }
         return componente;
@@ -148,23 +155,22 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
                 int ancho = getWidth();
                 int alto = Math.max(1, getHeight() - 2 * MARGEN_VERTICAL);
 
+                Color colorBarra = filaGris ? COLOR_BARRA_GRIS : COLOR_BARRA;
+                if (segmentoTail != null) {
+                    pintarSegmento(g2, segmentoTail, ancho, alto, colorBarra);
+                }
+                if (segmentoHead != null) {
+                    pintarSegmento(g2, segmentoHead, ancho, alto, colorBarra);
+                }
+                if (segmentoPreview != null) {
+                    // La reserva movida usa el MISMO color que una reserva real.
+                    pintarSegmento(g2, segmentoPreview, ancho, alto, COLOR_BARRA);
+                }
                 if (segmentoCreacion != null) {
-                    // La creacion en curso tapa cualquier barra real de la celda.
-                    pintarSegmento(g2, segmentoCreacion, ancho, alto, COLOR_PREVIEW);
-                } else if (segmentoPreview != null) {
-                    pintarSegmento(g2, segmentoPreview, ancho, alto, COLOR_PREVIEW);
-                } else {
-                    Color colorBarra = filaGris ? COLOR_BARRA_GRIS : COLOR_BARRA;
-                    if (segmentoTail != null) {
-                        pintarSegmento(g2, segmentoTail, ancho, alto, colorBarra);
-                    }
-                    if (segmentoHead != null) {
-                        pintarSegmento(g2, segmentoHead, ancho, alto, colorBarra);
-                    }
-                    if (bordeTurnover) {
-                        g2.setColor(COLOR_BORDE_TURNOVER);
-                        g2.fillRect(ancho / 4, MARGEN_VERTICAL, 1, alto);
-                    }
+                    // La creacion en curso se pinta ENCIMA de la barra real: en la
+                    // celda de check-out compartida conviven la cola nueva y la
+                    // cabeza del proximo huesped, separadas por SEPARACION_PX.
+                    pintarSegmento(g2, segmentoCreacion, ancho, alto, COLOR_BARRA);
                 }
             }
             pintarGrilla(g2);
@@ -186,9 +192,8 @@ public final class RendererOcupacion extends DefaultTableCellRenderer {
     }
 
     private void pintarSegmento(Graphics2D g2, GeometriaBarra.Segmento seg, int ancho, int alto, Color color) {
-        int x0 = (int) Math.round(seg.x0() * ancho);
-        int x1 = (int) Math.round(seg.x1() * ancho);
+        int[] px = GeometriaBarra.pixeles(seg, ancho);
         g2.setColor(color);
-        g2.fillRect(x0, MARGEN_VERTICAL, Math.max(0, x1 - x0), alto);
+        g2.fillRect(px[0], MARGEN_VERTICAL, Math.max(0, px[1] - px[0]), alto);
     }
 }

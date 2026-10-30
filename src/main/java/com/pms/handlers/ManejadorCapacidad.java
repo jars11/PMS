@@ -22,7 +22,9 @@ public class ManejadorCapacidad {
     public Set<DTCapacidadFaltante> hayCapacidad(DTRHSolicitada dtRHS) {
         Set<DTCapacidadFaltante> resultado = new TreeSet<>();
 
-        int passengers = 2 * dtRHS.getCantMatrimonios() + dtRHS.getCantIndividuales() + dtRHS.getCantBebes();
+        // Los bebes no consumen camas: las cunas son un recurso aparte y pueden
+        // ser menos que los bebes.
+        int passengers = 2 * dtRHS.getCantMatrimonios() + dtRHS.getCantIndividuales();
 
         ControladorHabitaciones ch = ControladorHabitaciones.getInstance();
 

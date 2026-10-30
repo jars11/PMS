@@ -226,4 +226,33 @@ class CalendarioOcupacionModelTest {
         assertNotNull(modelo.segmentoEn(0, colTurnover), "head entrante");
         assertNotNull(modelo.segmentoSalidaEn(0, colTurnover), "tail saliente");
     }
+
+    // ---------------------------------- etiqueta + reserva movida
+
+    @Test
+    void bloquesDeFilaExponeLosDatosDeLaEtiqueta() {
+        Habitacion h103 = new Habitacion(103, Set.of(), 1, 2, 0, 0);
+        OcupacionHabitacion.BloqueNoche bloque = new OcupacionHabitacion.BloqueNoche(
+                7L, INICIO, FIN, false, "Agustin Rivero", 3, 1);
+        OcupacionHabitacion ocupacion = new OcupacionHabitacion(h103,
+                Set.of(INICIO, INICIO.plusDays(1), INICIO.plusDays(2)), Map.of(INICIO, 7L),
+                List.of(bloque));
+        CalendarioOcupacionModel modelo = new CalendarioOcupacionModel(INICIO, 14, List.of(ocupacion));
+
+        assertEquals(1, modelo.bloquesDeFila(0).size());
+        assertEquals("Agustin Rivero", modelo.bloquesDeFila(0).get(0).titular());
+        assertEquals(3, modelo.bloquesDeFila(0).get(0).personas());
+        assertEquals(1, modelo.bloquesDeFila(0).get(0).bebes());
+    }
+
+    @Test
+    void ignorarLaReservaMovidaLevantaSuBarraDeLaFilaOriginal() {
+        CalendarioOcupacionModel modelo = modeloConBloque(false);
+
+        assertNull(modelo.segmentoEnIgnorando(0, 1, 7L), "la cabeza de la reserva movida no se pinta");
+        assertNull(modelo.segmentoSalidaEnIgnorando(0, 4, 7L), "la cola tampoco");
+
+        assertNotNull(modelo.segmentoEnIgnorando(0, 1, 99L), "otra reserva no se oculta");
+        assertNotNull(modelo.segmentoEn(0, 1), "sin reserva a ignorar la barra sigue");
+    }
 }

@@ -1,0 +1,19 @@
+T1 backend rest ocupacion mover redimensionar [done] 83f20d2
+T2 frontend calendario grilla barras drag crear [done] a8e9874
+T3 frontend mover redimensionar flechas [done] a8e9874
+T4 verificacion end-to-end [done]
+T5 tooltip hover [done] 4d10f9d
+T6 menu contextual [done] 96547ec
+T7 late checkout [done] 5b7769c
+T8 shift+rueda navegar dia a dia [done] b9f1063
+T9 calendario pestaña inicial [done] b86e1b8
+T10 sin scroll horizontal [done] b86e1b8
+T11 render fix al cambiar pestaña [done] b86e1b8
+T12a backend propuestas buscar/persistir [done] 9d6ae3a
+T12b frontend panel bloques + split redimensionable [done] 66715ad
+T12c frontend propuestas preview gris + crear reserva [done] 66715ad
+T12d backend alta de titulares (nuevo titular) [done] 02bd4d2
+T13 documento del titular heredado de Persona + autocompletado por documento [done] 02bd4d2
+T14 tooltip habitacion + scrolls + sin selector titular + sin leyenda [done] 780d12c
+T15 rediseño propuesta (panel lateral, bloques arriba, cruz, titular al confirmar) [done] cdd12b9
+T16 columna hoy + reservas orden/busqueda + compatibilidad real de mover [done] 0c4f58a

@@ -3,6 +3,8 @@ package com.pms.entities;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
+import com.pms.utils.TipoDocumento;
+
 import java.util.List;
 
 /** Reservation holder (the person who pays and owns the reservation). */
@@ -19,7 +21,16 @@ public class TitularReserva extends Persona {
 
     public TitularReserva(List<String> nombres, List<String> apellidos,
                           String celular, String telefonoFijo, String email) {
+        this(nombres, apellidos, null, null, celular, telefonoFijo, email);
+    }
+
+    /** Alta con documento (el formulario web pide primero el documento del titular). */
+    public TitularReserva(List<String> nombres, List<String> apellidos,
+                          String numeroDocumento, TipoDocumento tipoDocumento,
+                          String celular, String telefonoFijo, String email) {
         super(nombres, apellidos);
+        setNumeroDocumento(numeroDocumento);
+        setTipoDocumento(tipoDocumento);
         this.celular = celular;
         this.telefonoFijo = telefonoFijo;
         this.email = email;

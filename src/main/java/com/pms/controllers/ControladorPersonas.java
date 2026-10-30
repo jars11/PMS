@@ -45,12 +45,29 @@ public class ControladorPersonas {
     /**
      * Registers a new reservation holder and returns the managed instance (so
      * the caller gets the DB id). Envuelve el {@code guardarTitular} que ya
-     * existia sin uso.
+     * existia sin uso. Sobrecarga sin documento: la usan los llamadores que
+     * todavia no lo piden (Swing, seed y tests previos).
      */
     public TitularReserva altaTitular(List<String> nombres, List<String> apellidos,
                                       String celular, String telefonoFijo, String email) {
-        TitularReserva titular = new TitularReserva(nombres, apellidos, celular, telefonoFijo, email);
+        return altaTitular(nombres, apellidos, null, null, celular, telefonoFijo, email);
+    }
+
+    /**
+     * Registers a new reservation holder with its document (the web form asks
+     * for the document first) and returns the managed instance.
+     */
+    public TitularReserva altaTitular(List<String> nombres, List<String> apellidos,
+                                      String numeroDocumento, TipoDocumento tipoDocumento,
+                                      String celular, String telefonoFijo, String email) {
+        TitularReserva titular = new TitularReserva(nombres, apellidos,
+                numeroDocumento, tipoDocumento, celular, telefonoFijo, email);
         return repositorio.guardarTitular(titular);
+    }
+
+    /** Titular cuyo documento coincide exactamente, o null si no existe. */
+    public TitularReserva buscarTitularPorDocumento(String numeroDocumento) {
+        return repositorio.findTitularPorDocumento(numeroDocumento);
     }
 
     /** All reservation holders (titulares). */

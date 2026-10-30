@@ -135,11 +135,23 @@ public final class CalendarioOcupacionModel extends AbstractTableModel {
      * dia de salida (no cubierto).
      */
     public OcupacionHabitacion.BloqueNoche bloqueEn(int fila, int columna) {
+        return bloqueEnIgnorando(fila, columna, null);
+    }
+
+    /**
+     * Igual que {@link #bloqueEn(int, int)} pero descarta el bloque de la reserva
+     * indicada. El calendario lo usa para "levantar" la reserva que se esta
+     * moviendo de su fila original.
+     */
+    public OcupacionHabitacion.BloqueNoche bloqueEnIgnorando(int fila, int columna, Long reservaIgnorada) {
         LocalDate fecha = fechaDeColumna(columna);
         if (fecha == null) {
             return null;
         }
         for (OcupacionHabitacion.BloqueNoche bloque : ocupacion.get(fila).bloques()) {
+            if (reservaIgnorada != null && reservaIgnorada == bloque.reservaId()) {
+                continue;
+            }
             if (!fecha.isBefore(bloque.fechaInicio()) && fecha.isBefore(bloque.fechaFin())) {
                 return bloque;
             }
@@ -147,13 +159,28 @@ public final class CalendarioOcupacionModel extends AbstractTableModel {
         return null;
     }
 
+    /** Bloques de la fila (reservas activas), en el orden que los dio el controlador. */
+    public List<OcupacionHabitacion.BloqueNoche> bloquesDeFila(int fila) {
+        List<OcupacionHabitacion.BloqueNoche> bloques = ocupacion.get(fila).bloques();
+        return bloques == null ? List.of() : List.copyOf(bloques);
+    }
+
     /** Bloque cuya fecha de salida es exactamente la fecha de (fila, columna); {@code null} si no hay. */
     public OcupacionHabitacion.BloqueNoche bloqueSalidaEn(int fila, int columna) {
+        return bloqueSalidaEnIgnorando(fila, columna, null);
+    }
+
+    /** Igual que {@link #bloqueSalidaEn(int, int)} pero descarta la reserva indicada. */
+    public OcupacionHabitacion.BloqueNoche bloqueSalidaEnIgnorando(int fila, int columna,
+                                                                   Long reservaIgnorada) {
         LocalDate fecha = fechaDeColumna(columna);
         if (fecha == null) {
             return null;
         }
         for (OcupacionHabitacion.BloqueNoche bloque : ocupacion.get(fila).bloques()) {
+            if (reservaIgnorada != null && reservaIgnorada == bloque.reservaId()) {
+                continue;
+            }
             if (fecha.equals(bloque.fechaFin())) {
                 return bloque;
             }
@@ -163,13 +190,23 @@ public final class CalendarioOcupacionModel extends AbstractTableModel {
 
     /** Segmento de la barra que cubre la noche (fila, columna); {@code null} si libre o columna 0. */
     public GeometriaBarra.Segmento segmentoEn(int fila, int columna) {
-        OcupacionHabitacion.BloqueNoche bloque = bloqueEn(fila, columna);
+        return segmentoEnIgnorando(fila, columna, null);
+    }
+
+    /** Igual que {@link #segmentoEn(int, int)} pero descarta la reserva indicada. */
+    public GeometriaBarra.Segmento segmentoEnIgnorando(int fila, int columna, Long reservaIgnorada) {
+        OcupacionHabitacion.BloqueNoche bloque = bloqueEnIgnorando(fila, columna, reservaIgnorada);
         return bloque == null ? null : GeometriaBarra.segmento(aBloque(bloque), fechaDeColumna(columna));
     }
 
     /** Cola del dia de salida: segmento del bloque que termina en la fecha de (fila, columna). */
     public GeometriaBarra.Segmento segmentoSalidaEn(int fila, int columna) {
-        OcupacionHabitacion.BloqueNoche bloque = bloqueSalidaEn(fila, columna);
+        return segmentoSalidaEnIgnorando(fila, columna, null);
+    }
+
+    /** Igual que {@link #segmentoSalidaEn(int, int)} pero descarta la reserva indicada. */
+    public GeometriaBarra.Segmento segmentoSalidaEnIgnorando(int fila, int columna, Long reservaIgnorada) {
+        OcupacionHabitacion.BloqueNoche bloque = bloqueSalidaEnIgnorando(fila, columna, reservaIgnorada);
         return bloque == null ? null : GeometriaBarra.segmento(aBloque(bloque), fechaDeColumna(columna));
     }
 

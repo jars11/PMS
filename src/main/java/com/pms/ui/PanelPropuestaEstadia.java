@@ -39,6 +39,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -47,9 +48,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
 /**
- * Pestana "Propuesta de estadía" (rol RECEPCIONISTA). Permite cargar uno o mas
+ * Seccion "Propuesta de estadía" (rol RECEPCIONISTA), dentro de la pestana del
+ * calendario. Permite cargar uno o mas
  * bloques solicitados (fechas, cantidades y atributos), validarlos de forma
  * pura, buscar alternativas con {@link ManejadorBusquedaHuecos} en un hilo de
  * fondo y persistir la propuesta elegida como una {@link Reserva} real a traves
@@ -67,6 +70,8 @@ public final class PanelPropuestaEstadia extends JPanel {
     private final ControladorReservas controladorReservas = ControladorReservas.getInstance();
     private final ControladorPersonas controladorPersonas = ControladorPersonas.getInstance();
     private final Runnable alCrearReserva;
+    /** Notifica la propuesta elegida para pintarla en gris en el calendario. */
+    private final Consumer<Set<RHPropuesta>> alSeleccionar;
 
     private final JComboBox<Object> comboTitular = new JComboBox<>();
     private final JTextField campoNombres = new JTextField(14);
@@ -83,20 +88,33 @@ public final class PanelPropuestaEstadia extends JPanel {
 
     private final JButton botonBuscar = new JButton("Buscar propuestas");
     private final JButton botonAceptar = new JButton("Aceptar y crear reserva");
+    private final JButton botonCancelar = new JButton("Cancelar");
     private final JLabel etiquetaEstado = new JLabel(" ");
+    /** Generacion de busqueda: invalida resultados de workers viejos al cancelar. */
+    private int generacionBusqueda;
 
     public PanelPropuestaEstadia() {
-        this(null);
+        this(null, null);
     }
 
     public PanelPropuestaEstadia(Runnable alCrearReserva) {
+        this(alCrearReserva, null);
+    }
+
+    public PanelPropuestaEstadia(Runnable alCrearReserva, Consumer<Set<RHPropuesta>> alSeleccionar) {
         this.alCrearReserva = alCrearReserva;
+        this.alSeleccionar = alSeleccionar == null ? propuestas -> { } : alSeleccionar;
         setLayout(new BorderLayout(8, 8));
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         panelFilas.setLayout(new GridLayout(0, 1, 6, 6));
         listaPropuestas.setVisibleRowCount(8);
         listaPropuestas.setCellRenderer(rendererPropuestas());
+        listaPropuestas.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                notificarSeleccion();
+            }
+        });
 
         add(construirPanelSuperior(), BorderLayout.NORTH);
         add(construirPanelCentral(), BorderLayout.CENTER);
@@ -113,7 +131,7 @@ public final class PanelPropuestaEstadia extends JPanel {
      * vacio/nulo; por bloque rechaza fechas nulas, check-out no posterior al
      * check-in y cualquier cantidad negativa. Lanza {@link IllegalArgumentException}.
      */
-    public static void validarBloques(Set<DTRHSolicitada> bloques) {
+    public static void validarBloques(Collection<DTRHSolicitada> bloques) {
         if (bloques == null || bloques.isEmpty()) {
             throw new IllegalArgumentException("Agregá al menos un bloque de estadía.");
         }
@@ -134,9 +152,9 @@ public final class PanelPropuestaEstadia extends JPanel {
         }
     }
 
-    /** Construye un {@link DTRHSolicitada} por cada fila cargada. */
-    Set<DTRHSolicitada> construirBloques() {
-        Set<DTRHSolicitada> bloques = new LinkedHashSet<>();
+    /** Construye un {@link DTRHSolicitada} por cada fila cargada, sin deduplicar. */
+    List<DTRHSolicitada> construirBloques() {
+        List<DTRHSolicitada> bloques = new ArrayList<>();
         for (FilaBloque fila : filas) {
             bloques.add(fila.aDTO());
         }
@@ -146,7 +164,7 @@ public final class PanelPropuestaEstadia extends JPanel {
     // --------------------------------------------------------------- acciones
 
     private void buscar() {
-        Set<DTRHSolicitada> bloques;
+        List<DTRHSolicitada> bloques;
         try {
             bloques = construirBloques();
             validarBloques(bloques);
@@ -155,26 +173,64 @@ public final class PanelPropuestaEstadia extends JPanel {
             return; // NO se corre la busqueda
         }
 
-        botonBuscar.setEnabled(false);
+        final int generacion = ++generacionBusqueda;
+        mostrarBotonesDePropuesta();
+        botonAceptar.setEnabled(false);
         etiquetaEstado.setText("Buscando propuestas...");
         new SwingWorker<Set<Set<RHPropuesta>>, Void>() {
             @Override
             protected Set<Set<RHPropuesta>> doInBackground() {
-                return new ManejadorBusquedaHuecos().buscarHuecos(bloques, new InteraccionSwing(ventana()));
+                return new ManejadorBusquedaHuecos().buscarHuecos(bloques,
+                        new InteraccionSwing(ventana(), () -> generacion != generacionBusqueda));
             }
 
             @Override
             protected void done() {
-                botonBuscar.setEnabled(true);
+                if (generacion != generacionBusqueda) {
+                    return; // el usuario cancelo esta busqueda
+                }
                 try {
                     mostrarPropuestas(get());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    etiquetaEstado.setText("Búsqueda interrumpida.");
                 } catch (ExecutionException e) {
+                    etiquetaEstado.setText("Error al buscar propuestas.");
                     mostrarError(mensajeCausa(e));
                 }
             }
         }.execute();
+    }
+
+    /** Estado inicial: solo el boton de buscar. */
+    private void mostrarBotonesIniciales() {
+        botonBuscar.setVisible(true);
+        botonBuscar.setEnabled(true);
+        botonAceptar.setVisible(false);
+        botonAceptar.setEnabled(false);
+        botonCancelar.setVisible(false);
+        revalidate();
+        repaint();
+    }
+
+    /** Tras buscar: se oculta buscar y se muestran aceptar + cancelar. */
+    private void mostrarBotonesDePropuesta() {
+        botonBuscar.setVisible(false);
+        botonBuscar.setEnabled(false);
+        botonAceptar.setVisible(true);
+        botonCancelar.setVisible(true);
+        revalidate();
+        repaint();
+    }
+
+    /** Cancela la busqueda/seleccion y vuelve al estado inicial. */
+    private void cancelarBusqueda() {
+        generacionBusqueda++;
+        modeloPropuestas.clear();
+        listaPropuestas.clearSelection();
+        alSeleccionar.accept(Set.of());
+        etiquetaEstado.setText(" ");
+        mostrarBotonesIniciales();
     }
 
     private void aceptar() {
@@ -206,6 +262,8 @@ public final class PanelPropuestaEstadia extends JPanel {
                     etiquetaEstado.setText("Reserva #" + r.getId() + " creada.");
                     new InteraccionSwing(ventana()).notificar("Reserva creada: " + resumen(elegido));
                     modeloPropuestas.clear();
+                    alSeleccionar.accept(Set.of());
+                    mostrarBotonesIniciales();
                     if (alCrearReserva != null) {
                         alCrearReserva.run();
                     }
@@ -246,7 +304,6 @@ public final class PanelPropuestaEstadia extends JPanel {
         JButton agregar = new JButton("Agregar bloque");
         agregar.addActionListener(e -> agregarFila());
         barra.add(agregar);
-        barra.add(new JLabel("(cada bloque se busca en conjunto)"));
         contenedor.add(barra, BorderLayout.SOUTH);
         return contenedor;
     }
@@ -267,9 +324,13 @@ public final class PanelPropuestaEstadia extends JPanel {
     private JSplitPane construirPanelCentral() {
         JScrollPane scrollBloques = new JScrollPane(panelFilas);
         scrollBloques.setBorder(BorderFactory.createTitledBorder("Bloques solicitados"));
+        // Los bloques son altos: un paso de rueda comodo evita el scroll pixel a
+        // pixel que trae el JScrollPane por defecto.
+        scrollBloques.getVerticalScrollBar().setUnitIncrement(96);
 
         JScrollPane scrollPropuestas = new JScrollPane(listaPropuestas);
         scrollPropuestas.setBorder(BorderFactory.createTitledBorder("Propuestas encontradas"));
+        scrollPropuestas.getVerticalScrollBar().setUnitIncrement(48);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollBloques, scrollPropuestas);
         split.setResizeWeight(0.55);
@@ -281,9 +342,12 @@ public final class PanelPropuestaEstadia extends JPanel {
         JPanel botones = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         botonBuscar.addActionListener(e -> buscar());
         botonAceptar.addActionListener(e -> aceptar());
+        botonCancelar.addActionListener(e -> cancelarBusqueda());
         botonAceptar.setEnabled(false);
         botones.add(botonBuscar);
         botones.add(botonAceptar);
+        botones.add(botonCancelar);
+        mostrarBotonesIniciales();
         panel.add(etiquetaEstado, BorderLayout.WEST);
         panel.add(botones, BorderLayout.EAST);
         return panel;
@@ -348,10 +412,20 @@ public final class PanelPropuestaEstadia extends JPanel {
         botonAceptar.setEnabled(!resultado.isEmpty());
         if (resultado.isEmpty()) {
             etiquetaEstado.setText("Sin propuestas.");
+            alSeleccionar.accept(Set.of());
             new InteraccionSwing(ventana()).notificar("No se encontraron propuestas para los bloques pedidos.");
         } else {
             etiquetaEstado.setText(resultado.size() + " propuesta(s) encontrada(s).");
+            // La primera alternativa queda elegida: se pinta en gris en el
+            // calendario y el usuario puede recorrer las demas en la lista.
+            listaPropuestas.setSelectedIndex(0);
         }
+    }
+
+    /** Propaga la alternativa elegida (o vacio si no hay ninguna). */
+    private void notificarSeleccion() {
+        Set<RHPropuesta> elegido = listaPropuestas.getSelectedValue();
+        alSeleccionar.accept(elegido == null ? Set.of() : elegido);
     }
 
     private DefaultListCellRenderer rendererPropuestas() {
@@ -375,7 +449,7 @@ public final class PanelPropuestaEstadia extends JPanel {
     }
 
     private void mostrarError(String mensaje) {
-        JOptionPane.showMessageDialog(this, mensaje, "No se pudo completar", JOptionPane.ERROR_MESSAGE);
+        DialogoError.mostrar(this, "No se pudo completar", mensaje);
     }
 
     private static String mensajeCausa(Throwable e) {

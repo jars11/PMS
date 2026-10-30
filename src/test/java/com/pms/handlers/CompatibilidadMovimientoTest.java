@@ -1,4 +1,4 @@
-package com.pms.ui;
+package com.pms.handlers;
 
 import com.pms.utils.AtributoHabitacion;
 import com.pms.utils.MotivoRechazo;
