@@ -4,3 +4,6 @@ data/
 
 # Local SDD tooling state (auto-generated, contains machine-specific paths)
 .atl/
+
+# Local Engram memory state (per-machine, personal; not part of the shared repo)
+.engram/
