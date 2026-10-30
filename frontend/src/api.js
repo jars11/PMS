@@ -39,6 +39,23 @@ export const api = {
   reservas: () => request('/reservas'),
 
   /**
+   * Alta de habitacion: `{numero, atributos:[], camasMatrimoniales,
+   * camasIndividuales, cunas, colchones, tarifaPorNoche}` → `HabitacionVistaDto`
+   * creada (con su `prioridad`, que el backend asigna al final de la lista).
+   * 409 cuando el numero ya existe y 400 cuando algun campo es invalido: el
+   * mensaje del backend llega en `err.message`.
+   */
+  crearHabitacion: (payload) =>
+    request('/habitaciones', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /**
+   * Nuevo orden de prioridad: `ids` en el orden deseado, con el primero arriba
+   * de la lista (prioridad 1) → las habitaciones ya reordenadas.
+   */
+  reordenarHabitaciones: (ids) =>
+    request('/habitaciones/orden', { method: 'PUT', body: JSON.stringify({ ids }) }),
+
+  /**
    * Alta de titular: `{nombres:[], apellidos:[], numeroDocumento, tipoDocumento,
    * celular, telefonoFijo, email}` → `TitularVistaDto` con su `id` y documento.
    */

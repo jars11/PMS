@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Login from './Login';
 import ReservasLista from './ReservasLista';
+import Habitaciones from './Habitaciones';
 import Calendario from './Calendario';
 import PropuestaEstadia from './PropuestaEstadia';
 import ReservaForm from './ReservaForm';
@@ -66,6 +67,25 @@ export default function App() {
       setError(err.message);
     }
   }, []);
+
+  const refrescarHabitaciones = useCallback(async () => {
+    try {
+      setHabitaciones(await api.habitaciones());
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
+  // La pestaña admin lista las habitaciones por prioridad (1 arriba) y
+  // desempata por número. El orden del estado no cambia: el calendario y el
+  // formulario de reserva siguen viéndolas como las devuelve la API.
+  const habitacionesPorPrioridad = useMemo(
+    () =>
+      [...habitaciones].sort(
+        (a, b) => ((a.prioridad ?? 0) - (b.prioridad ?? 0)) || (a.numero - b.numero),
+      ),
+    [habitaciones],
+  );
 
   function salir() {
     localStorage.removeItem('pms.sesion');
@@ -137,6 +157,15 @@ export default function App() {
         <button className={pestana === 'lista' ? 'activo' : ''} onClick={() => cambiarPestana('lista')}>
           Reservas
         </button>
+        {/* Sección de administración: solo el rol ADMIN la ve. */}
+        {sesion.rol === 'ADMIN' && (
+          <button
+            className={pestana === 'habitaciones' ? 'activo' : ''}
+            onClick={() => cambiarPestana('habitaciones')}
+          >
+            Habitaciones
+          </button>
+        )}
         {/* El alta solo tiene sentido en el calendario: el panel lateral de la
             propuesta de estadía vive en esa pestaña. */}
         {pestana === 'calendario' && (
@@ -157,6 +186,13 @@ export default function App() {
       {cargando && <div className="cargando">Cargando…</div>}
 
       {!cargando && pestana === 'lista' && <ReservasLista reservas={reservas} />}
+
+      {!cargando && pestana === 'habitaciones' && (
+        <Habitaciones
+          habitaciones={habitacionesPorPrioridad}
+          onCambio={refrescarHabitaciones}
+        />
+      )}
 
       {!cargando && pestana === 'calendario' && (
         // Calendario a la izquierda y, al abrir "+ Nueva reserva", la propuesta
