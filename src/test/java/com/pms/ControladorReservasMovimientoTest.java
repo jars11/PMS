@@ -5,6 +5,7 @@ import com.pms.controllers.ControladorPersonas;
 import com.pms.controllers.ControladorReservas;
 import com.pms.controllers.ControladorReservas.ResultadoCompatibilidad;
 import com.pms.controllers.ControladorReservas.ResultadoMovimiento;
+import com.pms.dtos.PerfilRelajacion;
 import com.pms.entities.Habitacion;
 import com.pms.entities.RHPropuesta;
 import com.pms.entities.Reserva;
@@ -12,6 +13,7 @@ import com.pms.entities.TitularReserva;
 import com.pms.persistence.JpaUtil;
 import com.pms.utils.AtributoHabitacion;
 import com.pms.utils.MotivoRechazo;
+import com.pms.utils.NivelCapacidad;
 import com.pms.utils.TipoMoneda;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -268,6 +270,102 @@ class ControladorReservasMovimientoTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> cr.moverReserva(original.getId(), h101, D1, 9999L));
         assertSinMutacion(original.getId(), h101, 4500.0f); // 3 x 1500 (hab 101)
+    }
+
+    // ------------------------- atributos pedidos vs. relajados (spec mover)
+
+    /** Lo unico que el usuario pidio en la Solicitud: VistaAlMar. */
+    private static final Set<AtributoHabitacion> PEDIDO_VISTA_AL_MAR =
+            Set.of(AtributoHabitacion.VistaAlMar);
+
+    /** Perfil que acepta relajar los atributos (nada mas se relaja). */
+    private static final PerfilRelajacion ATRIBUTOS_RELAJADOS =
+            new PerfilRelajacion(false, true, false, NivelCapacidad.DISTRIBUCION_CAMAS);
+
+    /** Habitacion de la unica propuesta de la reserva recargada. */
+    private static long habitacionDe(Reserva recargada) {
+        assertEquals(1, recargada.getRHPropuestas().size());
+        return recargada.getRHPropuestas().iterator().next().getHabitacion().getId();
+    }
+
+    /**
+     * Mover el rango no debe mirar los atributos de la habitacion ASIGNADA: manda
+     * lo pedido en la Solicitud. Con 104 ocupada, el alta automatica del pedido
+     * {@code VistaAlMar} cae en 102 (VistaAlMar + Jacuzzi, un atributo EXTRA); por
+     * eso volver a la original y entrar a cualquier habitacion que cumpla lo
+     * pedido tiene que estar habilitado.
+     */
+    @Test
+    void moverVuelveALaHabitacionOriginalCuandoLaAsignadaTieneAtributosExtra() {
+        TitularReserva titular = altaTitular();
+        long h101 = idHabitacion(101);
+        long h102 = idHabitacion(102);
+        long h104 = idHabitacion(104);
+        // 104 (la que pide exactamente VistaAlMar) queda ocupada: el alta cae en 102.
+        long bloqueo = cr.crearReservaPara(titular, h104, D1, D4, 1, 1, 0).getId();
+        Reserva original = cr.crearReservaAutomaticaPersonas(titular, D1, D4, 1, 1, 0,
+                PEDIDO_VISTA_AL_MAR);
+        assertEquals(h102, habitacionDe(original), "102 tiene VistaAlMar + Jacuzzi");
+        assertTrue(cr.eliminarReserva(bloqueo), "se libera el bloqueo de 104");
+
+        List<ResultadoCompatibilidad> estados =
+                cr.compatibilidadMovimiento(original.getId(), h102, D1);
+        assertNull(motivoDe(estados, h102), "la original cumple lo pedido");
+        assertNull(motivoDe(estados, h104), "104 cumple lo pedido (VistaAlMar)");
+        assertEquals(MotivoRechazo.ATRIBUTOS_FALTANTES, motivoDe(estados, h101),
+                "101 no tiene VistaAlMar");
+
+        ResultadoMovimiento ida = cr.moverReserva(original.getId(), h102, D1, h104);
+        assertTrue(ida.movida(), "104 cumple lo pedido en la Solicitud");
+        assertNull(ida.motivo());
+        assertEquals(h104, habitacionDe(cargarReserva(original.getId())));
+
+        ResultadoMovimiento vuelta = cr.moverReserva(original.getId(), h104, D1, h102);
+        assertTrue(vuelta.movida(), "vuelve a la fila original");
+        assertNull(vuelta.motivo());
+        assertEquals(h102, habitacionDe(cargarReserva(original.getId())));
+        assertEquals(6600.0f, cargarReserva(original.getId()).getMontoTotal(), 0.001f); // 3 x 2200
+    }
+
+    /**
+     * Con {@code atributosRelajados} en el contrato no hay restriccion de
+     * atributos: la habitacion sin lo pedido queda habilitada.
+     */
+    @Test
+    void atributosRelajadosPermitenMoverAUnaHabitacionSinLoPedido() {
+        long h101 = idHabitacion(101);
+        long h104 = idHabitacion(104);
+        Reserva original = cr.crearReservaAutomaticaPersonas(altaTitular(), D1, D4, 1, 1, 0,
+                PEDIDO_VISTA_AL_MAR, ATRIBUTOS_RELAJADOS);
+        assertEquals(h104, habitacionDe(original));
+
+        assertNull(motivoDe(cr.compatibilidadMovimiento(original.getId(), h104, D1), h101),
+                "el usuario acepto relajar los atributos");
+        ResultadoMovimiento res = cr.moverReserva(original.getId(), h104, D1, h101);
+
+        assertTrue(res.movida());
+        assertNull(res.motivo());
+        assertEquals(h101, habitacionDe(cargarReserva(original.getId())));
+    }
+
+    /**
+     * Sin relajacion, la habitacion que no tiene un atributo PEDIDO sigue
+     * rechazandose por {@code ATRIBUTOS_FALTANTES} y no se muta nada.
+     */
+    @Test
+    void sinRelajacionSigueRechazandoLaHabitacionSinLoPedido() {
+        long h101 = idHabitacion(101);
+        long h104 = idHabitacion(104);
+        Reserva original = cr.crearReservaAutomaticaPersonas(altaTitular(), D1, D4, 1, 1, 0,
+                PEDIDO_VISTA_AL_MAR);
+        assertEquals(h104, habitacionDe(original));
+
+        ResultadoMovimiento res = cr.moverReserva(original.getId(), h104, D1, h101);
+
+        assertFalse(res.movida());
+        assertEquals(MotivoRechazo.ATRIBUTOS_FALTANTES, res.motivo());
+        assertEquals(h104, habitacionDe(cargarReserva(original.getId())));
+        assertEquals(6300.0f, cargarReserva(original.getId()).getMontoTotal(), 0.001f); // 3 x 2100
     }
 
     /** El rechazo no deja rastro: la reserva conserva origen, fechas y total. */
