@@ -269,6 +269,12 @@ label {
   padding: 6px 8px;
 }
 
+/* Boton "Hoy": misma altura que el campo de fecha de al lado. */
+.cal-hoy {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
 .cal-aviso {
   display: flex;
   align-items: flex-start;
@@ -367,6 +373,9 @@ label {
 .cal-habitacion {
   height: 34px;
   font-size: 0.8rem;
+  /* Linea horizontal que separa las celdas de la columna de habitaciones y
+     cierra cada fila, alineada con el border-bottom de las celdas de fecha. */
+  border-bottom: 1px solid var(--borde);
 }
 
 .cal-celda {
@@ -433,6 +442,12 @@ label {
 .barra-fantasma {
   background: #e57373;
   opacity: 0.6;
+}
+
+/* Reserva bajo el cursor: glow blanco en TODOS sus bloques visibles, para
+   reconocer de un vistazo una reserva que ocupa varios bloques. */
+.barra-resaltada {
+  box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.9);
 }
 
 /* Etiqueta "Titular — 2👤 + 👶" pintada sobre la barra (igual que Swing). */

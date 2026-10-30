@@ -668,6 +668,9 @@ export default function Calendario({
   const [tooltip, setTooltip] = useState(null);
   const tooltipRef = useRef(null);
   const tooltipClaveRef = useRef(null);
+  // Reserva bajo el cursor: todos sus bloques visibles se pintan con un glow
+  // blanco (una reserva de varios bloques se resalta entera de una vez).
+  const [reservaHover, setReservaHover] = useState(null);
   // Menu contextual (click derecho), igual que CalendarioPanel.mostrarMenu.
   const [menu, setMenu] = useState(null);
   const render = useCallback(() => setTick((t) => t + 1), []);
@@ -1057,6 +1060,7 @@ export default function Calendario({
   /** Al salir del calendario se oculta el tooltip y se suelta el cursor de redimension. */
   function salirDelContenedor() {
     ocultarTooltip();
+    fijarReservaHover(null);
     if (estadoRef.current.tipo !== 'redimension') fijarCursorExtremo(false);
   }
 
@@ -1064,6 +1068,15 @@ export default function Calendario({
     if (tooltipClaveRef.current === null) return;
     tooltipClaveRef.current = null;
     setTooltip(null);
+  }
+
+  /**
+   * Reserva resaltada por hover. Solo se actualiza cuando cambia la reserva:
+   * el hover corre en cada movimiento del mouse y no debe re-renderizar la
+   * grilla si sigue sobre la misma reserva.
+   */
+  function fijarReservaHover(reservaId) {
+    setReservaHover((prev) => (prev === reservaId ? prev : reservaId));
   }
 
   /**
@@ -1119,11 +1132,13 @@ export default function Calendario({
     if (est.tipo === 'redimension') {
       fijarCursorExtremo(true);
       ocultarTooltip();
+      fijarReservaHover(null);
       return;
     }
     if (est.tipo !== 'ninguno' || est.presionPendiente) {
       fijarCursorExtremo(false);
       ocultarTooltip();
+      fijarReservaHover(null);
       return;
     }
     const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
@@ -1133,9 +1148,15 @@ export default function Calendario({
     // habitacion, como TablaCalendario.htmlHabitacion en Swing.
     if (col === 0) {
       fijarCursorExtremo(false);
+      fijarReservaHover(null);
       mostrarTooltipHabitacion(m, fila, e);
       return;
     }
+    // Reserva bajo el puntero: define el glow blanco de todos sus bloques. Se
+    // calcula antes del extremo redimensionable para que el resaltado siga
+    // puesto mientras el puntero esta sobre el borde de la barra.
+    const bloque = fila >= 0 && col >= 1 ? bloqueEnPunto(m, fila, col, e, td) : null;
+    fijarReservaHover(bloque ? bloque.reservaId : null);
     // Sobre el extremo de una barra: cursor de redimension y sin tooltip.
     if (extremoEnPunto(m, fila, col, e, td)) {
       fijarCursorExtremo(true);
@@ -1143,7 +1164,6 @@ export default function Calendario({
       return;
     }
     fijarCursorExtremo(false);
-    const bloque = fila >= 0 && col >= 1 ? bloqueEnPunto(m, fila, col, e, td) : null;
     if (!bloque) {
       ocultarTooltip();
       return;
@@ -1254,6 +1274,7 @@ export default function Calendario({
     const est = estadoRef.current;
     // El tooltip no debe tapar ni frenar el crear/mover/redimensionar.
     ocultarTooltip();
+    fijarReservaHover(null);
 
     const td = e.target && e.target.closest ? e.target.closest('td[data-col]') : null;
     const fila = td ? Number(td.dataset.fila) : -1;
@@ -1428,15 +1449,25 @@ export default function Calendario({
     };
   }, []);
 
+  /** Aplica una fecha ISO como inicio: la misma ruta que escribir y Enter. */
+  function aplicarFechaISO(iso) {
+    setAviso(null);
+    setFechaInput(formatearDMA(iso));
+    setFechaInicio(iso);
+  }
+
   function aplicarFecha() {
     const iso = parseDMA(fechaInput);
     if (!iso) {
       setAviso({ tipo: 'error', mensaje: 'Fecha inválida. Usá dd/MM/yyyy.' });
       return;
     }
-    setAviso(null);
-    setFechaInput(formatearDMA(iso));
-    setFechaInicio(iso);
+    aplicarFechaISO(iso);
+  }
+
+  /** Boton "Hoy": equivale a escribir la fecha de hoy y presionar Enter. */
+  function irAHoy() {
+    aplicarFechaISO(fechaISO(new Date()));
   }
 
   const est = estadoRef.current;
@@ -1545,7 +1576,16 @@ export default function Calendario({
           );
         }
       }
-      return <span key={i} className={s.clase} style={{ left: x0, width: Math.max(0, x1 - x0) }} />;
+      // Glow blanco: se resaltan de una todos los bloques visibles de la
+      // reserva bajo el cursor, no solo el que tiene el puntero encima.
+      const resaltada = reservaHover != null && s.bloque && s.bloque.reservaId === reservaHover;
+      return (
+        <span
+          key={i}
+          className={resaltada ? `${s.clase} barra-resaltada` : s.clase}
+          style={{ left: x0, width: Math.max(0, x1 - x0) }}
+        />
+      );
     });
 
     return (
@@ -1579,6 +1619,9 @@ export default function Calendario({
           }}
           placeholder="dd/MM/yyyy"
         />
+        <button type="button" className="cal-hoy" onClick={irAHoy}>
+          Hoy
+        </button>
       </div>
 
       {aviso && (
