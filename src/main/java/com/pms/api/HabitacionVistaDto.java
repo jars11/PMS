@@ -19,7 +19,8 @@ public record HabitacionVistaDto(
         int colchones,
         int capacidad,
         float tarifaPorNoche,
-        boolean limpia) {
+        boolean limpia,
+        int prioridad) {
 
     public static HabitacionVistaDto de(Habitacion h) {
         return new HabitacionVistaDto(
@@ -32,6 +33,7 @@ public record HabitacionVistaDto(
                 h.getColchones(),
                 h.capacidad(),
                 h.getTarifaPorNoche(),
-                h.isLimpia());
+                h.isLimpia(),
+                h.getPrioridad());
     }
 }

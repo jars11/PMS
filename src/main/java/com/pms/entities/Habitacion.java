@@ -64,6 +64,12 @@ public class Habitacion {
     @Column(nullable = false, columnDefinition = "boolean default true")
     private boolean limpia = LIMPIA_POR_DEFECTO;
 
+    // Orden de preferencia para la asignacion: ascendente = mayor prioridad
+    // (prioridad 1 es la primera de la lista). default 0 para que hbm2ddl
+    // update pueda agregar la columna a una tabla existente.
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int prioridad;
+
     protected Habitacion() {
     }
 
@@ -177,6 +183,18 @@ public class Habitacion {
 
     public void setLimpia(boolean limpia) {
         this.limpia = limpia;
+    }
+
+    /**
+     * Prioridad de asignacion: 1 es la mas alta. No forma parte de
+     * validarCampos/actualizar porque el orden lo administra el controlador.
+     */
+    public int getPrioridad() {
+        return prioridad;
+    }
+
+    public void setPrioridad(int prioridad) {
+        this.prioridad = prioridad;
     }
 
     @Override

@@ -43,7 +43,19 @@ public class ControladorHabitaciones {
         Habitacion habitacion = new Habitacion(numero, atributos, cantidadMatrimoniales,
                 cantidadIndividuales, cantidadCunas, colchones);
         habitacion.setTarifaPorNoche(tarifaPorNoche);
+        habitacion.setPrioridad(siguientePrioridad());
         repositorio.guardar(habitacion);
+    }
+
+    /**
+     * Prioridad para una habitacion nueva: una mas que la maxima actual, para
+     * que el alta quede al final de la lista. Sin habitaciones, arranca en 1.
+     */
+    private int siguientePrioridad() {
+        return repositorio.findAll().stream()
+                .mapToInt(Habitacion::getPrioridad)
+                .max()
+                .orElse(0) + 1;
     }
 
     /** Room by id. Throws IllegalArgumentException when it does not exist. */
@@ -100,6 +112,33 @@ public class ControladorHabitaciones {
         List<Habitacion> todas = repositorio.findAll();
         todas.sort(Comparator.comparing(Habitacion::getNumero));
         return todas;
+    }
+
+    /**
+     * All rooms in assignment-priority order: ascending {@code prioridad} (1 is
+     * the highest priority), then ascending room number as a stable fallback.
+     */
+    public List<Habitacion> getHabitacionesPorPrioridad() {
+        List<Habitacion> todas = repositorio.findAll();
+        todas.sort(Comparator.comparingInt(Habitacion::getPrioridad)
+                .thenComparing(Habitacion::getNumero));
+        return todas;
+    }
+
+    /**
+     * Applies a new order to the rooms: the first id gets prioridad 1 (top of
+     * the list), the second prioridad 2, and so on. Each room is persisted and
+     * the result is returned in priority order. A missing id surfaces as
+     * IllegalArgumentException from {@link #getHabitacion(long)}.
+     */
+    public List<Habitacion> reordenar(List<Long> idsOrdenados) {
+        List<Long> ids = idsOrdenados == null ? List.of() : idsOrdenados;
+        for (int i = 0; i < ids.size(); i++) {
+            Habitacion habitacion = getHabitacion(ids.get(i));
+            habitacion.setPrioridad(i + 1);
+            repositorio.actualizar(habitacion);
+        }
+        return getHabitacionesPorPrioridad();
     }
 
     /** Rooms that have ALL the requested attributes (deduplicated by room number). */
