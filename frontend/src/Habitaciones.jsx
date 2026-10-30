@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 
 // Mismos valores y orden que el enum AtributoHabitacion del backend.
@@ -41,6 +41,18 @@ function mover(ids, arrastrado, destino) {
 }
 
 /**
+ * true cuando la fila en `indice` queda entre el origen y el destino del
+ * arrastre, o sea cuando el arrastre le abre lugar y se tiene que correr un
+ * escalón hacia arriba o hacia abajo.
+ */
+function seDesplaza(indice, origen, destino) {
+  if (origen == null || destino == null || origen === destino) return false;
+  return origen < destino
+    ? indice > origen && indice <= destino
+    : indice >= destino && indice < origen;
+}
+
+/**
  * Sección admin "Habitaciones": lista reordenable por drag & drop (el orden
  * ascendente de filas es la prioridad de asignación, con la primera arriba) y
  * formulario de alta. `habitaciones` ya llega ordenada por prioridad y
@@ -57,9 +69,92 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   const [errorOrden, setErrorOrden] = useState('');
   const [reordenando, setReordenando] = useState(false);
 
+  // Nodos de cada fila (id → <li>) para medir y animar el reordenamiento.
+  const filasRef = useRef(new Map());
+  // Posición visual de cada fila justo antes de aplicar un orden nuevo (FLIP).
+  const antesRef = useRef(null);
+  // Filas con un desplazamiento de preview aplicado, para poder limpiarlo.
+  const desplazadasRef = useRef(new Set());
+
   const ordenadas = ordenLocal
     ? ordenLocal.map((id) => habitaciones.find((h) => h.id === id)).filter(Boolean)
     : habitaciones;
+
+  const indiceDe = (id) => {
+    if (id == null) return null;
+    const i = ordenadas.findIndex((h) => h.id === id);
+    return i < 0 ? null : i;
+  };
+  const indiceArrastrado = indiceDe(arrastrando);
+  const indiceSobre = indiceDe(sobre);
+
+  /** Guarda la posición visual actual de cada fila para animar el próximo orden. */
+  function capturarPosiciones() {
+    const posiciones = new Map();
+    filasRef.current.forEach((el, id) => posiciones.set(id, el.getBoundingClientRect().top));
+    antesRef.current = posiciones;
+  }
+
+  useLayoutEffect(() => {
+    const filas = [...filasRef.current.entries()];
+    const antes = antesRef.current;
+    antesRef.current = null;
+
+    if (antes) {
+      // FLIP: el orden ya cambió. Soltamos los transforms del preview, medimos
+      // el layout final y arrancamos desde la posición visual previa para
+      // animar hasta 0 (el estado y la persistencia no se tocan).
+      for (const [, el] of filas) {
+        el.style.transition = 'none';
+        el.style.transform = '';
+      }
+      const animadas = [];
+      for (const [id, el] of filas) {
+        const previa = antes.get(id);
+        if (previa == null) continue;
+        const delta = previa - el.getBoundingClientRect().top;
+        if (Math.abs(delta) < 0.5) continue;
+        el.style.transform = `translateY(${delta}px)`;
+        animadas.push(el);
+      }
+      if (animadas.length > 0) {
+        // Fuerza el reflow con el delta aplicado antes de habilitar la transición.
+        animadas[0].getBoundingClientRect();
+        for (const el of animadas) {
+          el.style.transition = '';
+          el.style.transform = '';
+        }
+      }
+      for (const [, el] of filas) el.style.transition = '';
+      desplazadasRef.current.clear();
+      return;
+    }
+
+    // Preview durante el arrastre: cada fila se corre a su lugar definitivo y la
+    // arrastrada sigue al destino, así la lista se ve "hacer lugar" en vivo.
+    const ids = ordenadas.map((h) => h.id);
+    const origenIdx = arrastrando == null ? -1 : ids.indexOf(arrastrando);
+    const destinoIdx = sobre == null ? -1 : ids.indexOf(sobre);
+    const objetivo =
+      origenIdx >= 0 && destinoIdx >= 0 ? mover(ids, arrastrando, sobre) : null;
+
+    for (const id of desplazadasRef.current) {
+      const el = filasRef.current.get(id);
+      if (el) el.style.transform = '';
+    }
+    desplazadasRef.current.clear();
+    if (!objetivo) return;
+
+    const tops = ids.map((id) => filasRef.current.get(id)?.offsetTop ?? 0);
+    ids.forEach((id, desde) => {
+      const hasta = objetivo.indexOf(id);
+      const delta = hasta === desde ? 0 : tops[hasta] - tops[desde];
+      const el = filasRef.current.get(id);
+      if (!el || !delta) return;
+      el.style.transform = `translateY(${delta}px)`;
+      desplazadasRef.current.add(id);
+    });
+  }, [arrastrando, sobre, ordenadas]);
 
   function campo(clave) {
     return (e) => setForm((f) => ({ ...f, [clave]: e.target.value }));
@@ -89,6 +184,7 @@ export default function Habitaciones({ habitaciones, onCambio }) {
 
     // Optimista: la fila se mueve ya y, si el backend rechaza, el orden vuelve
     // al del padre (que sigue siendo el viejo) al limpiar ordenLocal.
+    capturarPosiciones();
     setOrdenLocal(ids);
     setReordenando(true);
     setErrorOrden('');
@@ -98,6 +194,8 @@ export default function Habitaciones({ habitaciones, onCambio }) {
     } catch (err) {
       setErrorOrden(err.message);
     } finally {
+      // Si el orden vuelve atrás (error) el regreso también se anima.
+      capturarPosiciones();
       setOrdenLocal(null);
       setReordenando(false);
     }
@@ -141,10 +239,15 @@ export default function Habitaciones({ habitaciones, onCambio }) {
           {ordenadas.map((h, i) => (
             <li
               key={h.id}
+              ref={(el) => {
+                if (el) filasRef.current.set(h.id, el);
+                else filasRef.current.delete(h.id);
+              }}
               className={
                 'habitacion-fila' +
                 (arrastrando === h.id ? ' arrastrando' : '') +
-                (sobre === h.id && arrastrando != null && arrastrando !== h.id ? ' sobre' : '')
+                (sobre === h.id && arrastrando != null && arrastrando !== h.id ? ' sobre' : '') +
+                (seDesplaza(i, indiceArrastrado, indiceSobre) ? ' desplazada' : '')
               }
               draggable
               onDragStart={(e) => {

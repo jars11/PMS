@@ -959,9 +959,14 @@ label.check input {
   border-radius: 6px;
   font-size: 0.88rem;
   cursor: grab;
+  /* Reordenamiento animado: la fila se corre suavemente al hacer lugar. */
+  transition: transform 150ms ease;
+  will-change: transform;
 }
 
 .habitacion-fila.arrastrando {
+  position: relative;
+  z-index: 2;
   opacity: 0.45;
 }
 
@@ -969,6 +974,19 @@ label.check input {
 .habitacion-fila.sobre {
   border-color: var(--acento);
   box-shadow: inset 0 2px 0 var(--acento);
+}
+
+/* Filas que se corren un escalón para dejar ver el hueco del destino. */
+.habitacion-fila.desplazada {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .habitacion-fila {
+    transition: none;
+  }
 }
 
 .habitacion-grip {
