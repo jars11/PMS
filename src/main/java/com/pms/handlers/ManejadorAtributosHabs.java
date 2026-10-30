@@ -51,8 +51,9 @@ public class ManejadorAtributosHabs {
     /**
      * Best room free for the WHOLE block that fits all passengers, or null.
      * Exact attribute match is preferred; tie-break by fewer extra attributes,
-     * then lowest room number. Otherwise the room with the most matching
-     * attributes wins; tie-break by fewer total attributes, then room number.
+     * then higher priority (lower prioridad, then lower room number). Otherwise
+     * the room with the most matching attributes wins; tie-break by fewer total
+     * attributes, then the same priority rule.
      */
     public Habitacion brindarHabitacionesDisponibles(DTRHSolicitada dtrhs) {
         // Los bebes no consumen camas: las cunas son un recurso aparte y pueden
@@ -93,7 +94,7 @@ public class ManejadorAtributosHabs {
                 }
                 int extraH = h.getAtributos().size() - requeridos.size();
                 int extraM = mejor.getAtributos().size() - requeridos.size();
-                if (extraH < extraM || (extraH == extraM && h.getNumero() < mejor.getNumero())) {
+                if (extraH < extraM || (extraH == extraM && ganaPorPrioridad(h, mejor))) {
                     mejor = h;
                 }
             }
@@ -109,12 +110,24 @@ public class ManejadorAtributosHabs {
                         || (coindH == coindM
                         && (h.getAtributos().size() < mejor.getAtributos().size()
                         || (h.getAtributos().size() == mejor.getAtributos().size()
-                        && h.getNumero() < mejor.getNumero())))) {
+                        && ganaPorPrioridad(h, mejor))))) {
                     mejor = h;
                 }
             }
         }
 
         return mejor;
+    }
+
+    /**
+     * Desempate entre dos candidatas equivalentes: gana la de menor
+     * {@code prioridad} (la de mas arriba en la lista) y, si empatan, la de
+     * menor numero de habitacion (orden estable).
+     */
+    private static boolean ganaPorPrioridad(Habitacion candidata, Habitacion actual) {
+        if (candidata.getPrioridad() != actual.getPrioridad()) {
+            return candidata.getPrioridad() < actual.getPrioridad();
+        }
+        return candidata.getNumero() < actual.getNumero();
     }
 }

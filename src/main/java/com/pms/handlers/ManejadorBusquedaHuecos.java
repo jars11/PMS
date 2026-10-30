@@ -58,13 +58,14 @@ public class ManejadorBusquedaHuecos {
             return total;
         }
 
-        /** Clave deterministica por numeros de habitacion, para desempatar. */
+        /** Clave deterministica por prioridad y numero de habitacion, para desempatar. */
         String claveHabitaciones() {
             List<String> numeros = new ArrayList<>();
             for (RHPropuesta p : conjunto) {
                 String numero = p.getHabitacion() == null
                         || p.getHabitacion().getNumero() == null
-                        ? "?" : String.format("%04d", p.getHabitacion().getNumero());
+                        ? "?" : String.format("%04d:%04d",
+                        p.getHabitacion().getPrioridad(), p.getHabitacion().getNumero());
                 numeros.add(numero);
             }
             numeros.sort(String::compareTo);
