@@ -942,6 +942,15 @@ label.check input {
   font-size: 1rem;
 }
 
+/* Cabecera de la lista: título a la izquierda y estado de guardado como texto
+   simple a la derecha (no un cartel aparte que parezca un error de la GUI). */
+.habitaciones-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .habitaciones-ayuda {
   margin: 0;
   font-size: 0.82rem;

@@ -272,7 +272,10 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   return (
     <div className="habitaciones">
       <section className="habitaciones-lista-wrap">
-        <h2>Habitaciones</h2>
+        <div className="habitaciones-cabecera">
+          <h2>Habitaciones</h2>
+          {reordenando && <span className="habitaciones-estado">Guardando orden…</span>}
+        </div>
         <p className="habitaciones-ayuda">
           Arrastrá las filas para cambiar el orden. El orden ascendente es la prioridad: la primera
           fila tiene prioridad sobre las de abajo cuando varias pueden entrar en la misma propuesta.
@@ -360,7 +363,6 @@ export default function Habitaciones({ habitaciones, onCambio }) {
             <li className="habitacion-vacio">No hay habitaciones.</li>
           )}
         </ul>
-        {reordenando && <div className="habitaciones-estado">Guardando orden…</div>}
       </section>
 
       <form className="habitaciones-form" onSubmit={agregar}>
