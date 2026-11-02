@@ -1050,6 +1050,32 @@ label.check input {
   font-size: 0.8rem;
 }
 
+/* Rótulos que enmarcan la lista: arriba la más prioritaria, abajo la menos.
+   Reemplazan a la numeración de cada fila. */
+.habitaciones-prioridad-tope {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-tenue);
+}
+
+.habitaciones-prioridad-tope--fin {
+  align-self: flex-end;
+}
+
+/* El botón nativo del selector de fecha (el icono del calendario) viene negro
+   sobre fondo oscuro y no se ve: se invierte para que quede blanco. */
+input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+input[type='date']:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
 .habitacion-numero {
   flex: 0 0 90px;
   font-weight: 600;

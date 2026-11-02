@@ -281,6 +281,8 @@ export default function Habitaciones({ habitaciones, onCambio }) {
           fila tiene prioridad sobre las de abajo cuando varias pueden entrar en la misma propuesta.
         </p>
 
+        <span className="habitaciones-prioridad-tope">Más prioritaria</span>
+
         {errorOrden && <div className="error habitaciones-error">{errorOrden}</div>}
 
         <ul
@@ -351,7 +353,6 @@ export default function Habitaciones({ habitaciones, onCambio }) {
               <span className="habitacion-grip" aria-hidden="true">
                 ⠿
               </span>
-              <span className="habitacion-prioridad">{i + 1}</span>
               <span className="habitacion-numero">Hab. {h.numero}</span>
               <span className="habitacion-camas">{distribucionCamas(h)}</span>
               <span className="habitacion-atributos">
@@ -363,6 +364,9 @@ export default function Habitaciones({ habitaciones, onCambio }) {
             <li className="habitacion-vacio">No hay habitaciones.</li>
           )}
         </ul>
+        <span className="habitaciones-prioridad-tope habitaciones-prioridad-tope--fin">
+          Menos prioritaria
+        </span>
       </section>
 
       <form className="habitaciones-form" onSubmit={agregar}>
