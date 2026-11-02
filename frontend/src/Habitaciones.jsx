@@ -73,6 +73,9 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   const filasRef = useRef(new Map());
   // Posición base (layout, sin transform) de cada fila: id → offsetTop.
   const topsBaseRef = useRef(new Map());
+  // Posición base en coordenadas de viewport, capturada al iniciar el arrastre:
+  // en ese momento no hay transforms y las filas no se reordenan hasta soltar.
+  const topsCursorRef = useRef(new Map());
   // Filas con un desplazamiento de preview aplicado, para poder limpiarlo.
   const desplazadasRef = useRef(new Set());
 
@@ -87,6 +90,44 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   };
   const indiceArrastrado = indiceDe(arrastrando);
   const indiceSobre = indiceDe(sobre);
+
+  /**
+   * Fila objetivo según la POSICIÓN del cursor, no según el elemento que recibe
+   * el dragover.
+   *
+   * El preview mueve las filas con transform, y el transform SÍ cambia el
+   * elemento que queda bajo el cursor. Si el destino se leyera del evento, cada
+   * movimiento de filas cambiaba el destino, que movía las filas otra vez... y
+   * la lista oscilaba sola aunque el mouse estuviera quieto.
+   *
+   * Se usa la geometría capturada al iniciar el arrastre (sin transforms y sin
+   * transiciones en curso): leer las filas ahora devolvería posiciones a medio
+   * animar y elegiría la fila vecina.
+   */
+  function filaBajoCursor(clientY) {
+    const ids = ordenLocal ?? habitaciones.map((h) => h.id);
+    const tops = topsCursorRef.current;
+    let mejor = null;
+    let mejorDist = Infinity;
+    for (const id of ids) {
+      const el = filasRef.current.get(id);
+      const top = tops.get(id);
+      if (!el || top == null) continue;
+      const dist = Math.abs(clientY - (top + el.offsetHeight / 2));
+      if (dist < mejorDist) {
+        mejorDist = dist;
+        mejor = id;
+      }
+    }
+    return mejor;
+  }
+
+  /** Captura la geometría de las filas tal como están ahora (sin transforms). */
+  function capturarGeometria() {
+    const tops = new Map();
+    for (const [id, el] of filasRef.current) tops.set(id, el.getBoundingClientRect().top);
+    topsCursorRef.current = tops;
+  }
 
   /**
    * Preview del reordenamiento: cada fila se corre a la posición que va a ocupar
@@ -214,7 +255,29 @@ export default function Habitaciones({ habitaciones, onCambio }) {
 
         {errorOrden && <div className="error habitaciones-error">{errorOrden}</div>}
 
-        <ul className="habitaciones-lista">
+        <ul
+          className="habitaciones-lista"
+          // Los eventos de arrastre se manejan en el contenedor: así el destino
+          // depende solo de la posición del cursor y no de qué fila quedó
+          // debajo (ver filaBajoCursor).
+          onDragOver={(e) => {
+            if (arrastrando == null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const id = filaBajoCursor(e.clientY);
+            if (id != null && sobre !== id) setSobre(id);
+          }}
+          onDrop={(e) => {
+            if (arrastrando == null) return;
+            e.preventDefault();
+            const id = filaBajoCursor(e.clientY) ?? sobre ?? arrastrando;
+            soltar(id);
+          }}
+          onDragEnd={() => {
+            setArrastrando(null);
+            setSobre(null);
+          }}
+        >
           {ordenadas.map((h, i) => (
             <li
               key={h.id}
@@ -230,32 +293,13 @@ export default function Habitaciones({ habitaciones, onCambio }) {
               }
               draggable
               onDragStart={(e) => {
+                // Geometría previa al preview: con transforms aplicados las
+                // posiciones quedarían a medio animar.
+                capturarGeometria();
                 setArrastrando(h.id);
                 // Firefox no inicia el arrastre sin datos en el dataTransfer.
                 e.dataTransfer.setData('text/plain', String(h.id));
                 e.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragOver={(e) => {
-                if (arrastrando == null) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                // También se registra la propia fila arrastrada: así, al volver
-                // sobre el origen, `mover()` devuelve null y el preview se
-                // desarma en vez de quedar mostrando un hueco viejo.
-                if (sobre !== h.id) setSobre(h.id);
-              }}
-              // Sin onDragLeave: al pasar de una fila a otra el navegador emite
-              // dragleave ANTES del dragover siguiente. Limpiar `sobre` ahí
-              // devolvía todas las filas a su lugar y las volvía a correr en el
-              // mismo frame (eso era lo que se veía trabado). `sobre` ahora solo
-              // cambia en dragover y se limpia al soltar o cancelar.
-              onDrop={(e) => {
-                e.preventDefault();
-                soltar(h.id);
-              }}
-              onDragEnd={() => {
-                setArrastrando(null);
-                setSobre(null);
               }}
             >
               <span className="habitacion-grip" aria-hidden="true">
