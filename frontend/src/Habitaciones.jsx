@@ -276,11 +276,6 @@ export default function Habitaciones({ habitaciones, onCambio }) {
           <h2>Habitaciones</h2>
           {reordenando && <span className="habitaciones-estado">Guardando orden…</span>}
         </div>
-        <p className="habitaciones-ayuda">
-          Arrastrá las filas para cambiar el orden. El orden ascendente es la prioridad: la primera
-          fila tiene prioridad sobre las de abajo cuando varias pueden entrar en la misma propuesta.
-        </p>
-
         <span className="habitaciones-prioridad-tope">Más prioritaria</span>
 
         {errorOrden && <div className="error habitaciones-error">{errorOrden}</div>}
@@ -331,23 +326,14 @@ export default function Habitaciones({ habitaciones, onCambio }) {
                 e.dataTransfer.setData('text/plain', String(h.id));
                 e.dataTransfer.effectAllowed = 'move';
 
-                // Imagen de arrastre propia: la fila se ve OPACA y con el
-                // reborde celeste mientras sigue al cursor. Sin esto el navegador
-                // usa una copia de la fila tal cual (y, junto con el hueco que
-                // deja en la lista, se veía doble).
-                const fila = e.currentTarget;
-                const caja = fila.getBoundingClientRect();
-                const clon = fila.cloneNode(true);
-                clon.classList.add('habitacion-ghost');
-                clon.style.width = `${caja.width}px`;
-                document.body.appendChild(clon);
-                e.dataTransfer.setDragImage(
-                  clon,
-                  Math.max(0, Math.min(caja.width, e.clientX - caja.left)),
-                  Math.max(0, Math.min(caja.height, e.clientY - caja.top)),
-                );
-                // El navegador ya tomó la imagen en este tick.
-                setTimeout(() => clon.remove(), 0);
+                // Sin imagen de arrastre: el navegador no dibuja nada siguiendo
+                // al cursor, así la habitación se ve SOLO como el hueco celeste
+                // de la lista. Se usa un canvas transparente de 1x1 px porque
+                // setDragImage exige un elemento.
+                const vacio = document.createElement('canvas');
+                vacio.width = 1;
+                vacio.height = 1;
+                e.dataTransfer.setDragImage(vacio, 0, 0);
               }}
             >
               <span className="habitacion-grip" aria-hidden="true">

@@ -951,12 +951,6 @@ label.check input {
   gap: 10px;
 }
 
-.habitaciones-ayuda {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--texto-tenue);
-}
-
 .habitaciones-lista-wrap,
 .habitaciones-form {
   display: flex;
@@ -1012,17 +1006,6 @@ label.check input {
 /* Ninguna otra fila lleva reborde celeste: el resalte es exclusivo de la
    habitación que se está moviendo. */
 
-/* Clon que el navegador usa como imagen de arrastre: opaco como el resto y con
-   el reborde celeste que identifica la habitación seleccionada. */
-.habitacion-ghost {
-  position: fixed;
-  top: -1000px;
-  left: -1000px;
-  opacity: 1;
-  background: var(--panel-2);
-  border: 2px solid var(--acento);
-  pointer-events: none;
-}
 
 /* Filas que se corren un escalón para dejar ver el hueco del destino. */
 .habitacion-fila.desplazada {
@@ -1060,8 +1043,9 @@ label.check input {
   color: var(--texto-tenue);
 }
 
+/* El rótulo de abajo va también a la izquierda, alineado con el de arriba. */
 .habitaciones-prioridad-tope--fin {
-  align-self: flex-end;
+  align-self: flex-start;
 }
 
 /* El botón nativo del selector de fecha (el icono del calendario) viene negro
