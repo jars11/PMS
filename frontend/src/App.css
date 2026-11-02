@@ -269,6 +269,12 @@ label {
   padding: 6px 8px;
 }
 
+/* Boton "Hoy": misma altura que el campo de fecha de al lado. */
+.cal-hoy {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
 .cal-aviso {
   display: flex;
   align-items: flex-start;
@@ -367,6 +373,9 @@ label {
 .cal-habitacion {
   height: 34px;
   font-size: 0.8rem;
+  /* Linea horizontal que separa las celdas de la columna de habitaciones y
+     cierra cada fila, alineada con el border-bottom de las celdas de fecha. */
+  border-bottom: 1px solid var(--borde);
 }
 
 .cal-celda {
@@ -433,6 +442,12 @@ label {
 .barra-fantasma {
   background: #e57373;
   opacity: 0.6;
+}
+
+/* Reserva bajo el cursor: glow blanco en TODOS sus bloques visibles, para
+   reconocer de un vistazo una reserva que ocupa varios bloques. */
+.barra-resaltada {
+  box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.9);
 }
 
 /* Etiqueta "Titular — 2👤 + 👶" pintada sobre la barra (igual que Swing). */
@@ -893,4 +908,150 @@ label.check input {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* Seccion admin "Habitaciones": lista reordenable + alta. */
+.habitaciones {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.habitaciones h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.habitaciones-ayuda {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--texto-tenue);
+}
+
+.habitaciones-lista-wrap,
+.habitaciones-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.habitaciones-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Cada fila es el blanco del drag & drop: el orden ascendente es la prioridad. */
+.habitacion-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  cursor: grab;
+  /* Reordenamiento animado: la fila se corre suavemente al hacer lugar. */
+  transition: transform 150ms ease;
+  will-change: transform;
+}
+
+.habitacion-fila.arrastrando {
+  position: relative;
+  z-index: 2;
+  opacity: 0.45;
+}
+
+/* Marca la fila donde va a caer la arrastrada. */
+.habitacion-fila.sobre {
+  border-color: var(--acento);
+  box-shadow: inset 0 2px 0 var(--acento);
+}
+
+/* Filas que se corren un escalón para dejar ver el hueco del destino. */
+.habitacion-fila.desplazada {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .habitacion-fila {
+    transition: none;
+  }
+}
+
+.habitacion-grip {
+  color: var(--texto-tenue);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.habitacion-prioridad {
+  flex: 0 0 22px;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.habitacion-numero {
+  flex: 0 0 90px;
+  font-weight: 600;
+}
+
+.habitacion-camas {
+  flex: 0 0 auto;
+  color: var(--texto-tenue);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.habitacion-atributos {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.habitacion-vacio {
+  padding: 12px;
+  text-align: center;
+  color: var(--texto-tenue);
+  font-size: 0.85rem;
+}
+
+.habitaciones-estado {
+  font-size: 0.82rem;
+  color: var(--texto-tenue);
+}
+
+.habitaciones-atributos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.habitaciones-atributos legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--texto-tenue);
+}
+
+.habitaciones-error {
+  margin: 0;
 }

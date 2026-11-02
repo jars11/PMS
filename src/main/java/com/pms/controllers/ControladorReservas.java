@@ -1377,7 +1377,7 @@ public class ControladorReservas {
         }
 
         CompatibilidadMovimiento.BloqueMovido movido = new CompatibilidadMovimiento.BloqueMovido(
-                objetivo.getAtributosHabitacion(), asignacion.camasMatrimoniales(),
+                atributosExigidosParaMover(em, reserva, objetivo), asignacion.camasMatrimoniales(),
                 asignacion.camasIndividuales(), asignacion.cunas(), ini, fin,
                 reserva.isLateCheckout());
 
@@ -1388,6 +1388,48 @@ public class ControladorReservas {
                 destino.isLimpia(), libre, checkInEnFin, lateTerminaEnIni);
 
         return CompatibilidadMovimiento.evaluar(movido, dst);
+    }
+
+    /**
+     * Atributos que un movimiento debe respetar. Manda lo PEDIDO: los atributos
+     * del bloque de la {@link Solicitud} ({@link RHSolicitada}) que cubre las
+     * mismas fechas que el bloque movido; si el contrato acepto relajar los
+     * atributos, no se exige ninguno. Los atributos de la habitacion ASIGNADA que
+     * guarda la {@link RHPropuesta} solo se usan como respaldo (contrato ausente,
+     * bloque pedido no encontrado o pedido legacy sin atributos explicitos),
+     * porque usarlos como exigencias rechazaba la vuelta a la fila original
+     * cuando la habitacion asignada tenia atributos de mas.
+     */
+    private static Set<AtributoHabitacion> atributosExigidosParaMover(EntityManager em, Reserva reserva,
+                                                                     RHPropuesta objetivo) {
+        ContratoReserva contrato = em.createQuery(
+                        "select c from ContratoReserva c join fetch c.solicitud " +
+                                "where c.reserva.id = :rid", ContratoReserva.class)
+                .setParameter("rid", reserva.getId())
+                .getResultList().stream().findFirst().orElse(null);
+        if (contrato == null) {
+            return objetivo.getAtributosHabitacion();
+        }
+        if (contrato.isAtributosRelajados()) {
+            return Set.of();
+        }
+        Solicitud solicitud = contrato.getSolicitud();
+        if (solicitud == null) {
+            return objetivo.getAtributosHabitacion();
+        }
+        for (RHSolicitada pedido : solicitud.getRHSolicitadas()) {
+            if (objetivo.getFechaInicio().equals(pedido.getFechaInicio())
+                    && objetivo.getFechaFin().equals(pedido.getFechaFin())) {
+                Set<AtributoHabitacion> atributosPedidos = pedido.getAtributosHabitacion();
+                if (atributosPedidos == null || atributosPedidos.isEmpty()) {
+                    // Pedido legacy (o alta sin atributos explicitos): el pedido espeja
+                    // la habitacion asignada, como antes de este cambio.
+                    return objetivo.getAtributosHabitacion();
+                }
+                return atributosPedidos;
+            }
+        }
+        return objetivo.getAtributosHabitacion();
     }
 
     /** True cuando la habitacion no tiene noches ocupadas por OTRAS reservas activas en el rango. */
