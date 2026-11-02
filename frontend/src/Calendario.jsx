@@ -1564,6 +1564,59 @@ export default function Calendario({
     return cacheEtiquetas.get(clave);
   }
 
+  /**
+   * Halos (glow) de la reserva bajo el cursor: UN elemento por tramo contiguo de
+   * la fila, no uno por celda. Un halo por celda duplicaba la sombra en cada
+   * costura y dejaba una franja mas blanca que se veia como bloques separados;
+   * con un solo elemento por tramo el halo recorre el rango entero.
+   *
+   * Se pintan dentro de la primera celda de dias (que es position: relative) y
+   * se dejan desbordar hacia la derecha, porque no hay overflow: hidden.
+   */
+  function halosDeFila(fila) {
+    if (reservaHover == null || !m || !izquierdaDeCol[1]) return [];
+    const tramos = [];
+    let actual = null;
+    for (let col = 1; col <= m.noches; col++) {
+      const f = m.fechaDeColumna(col);
+      if (!f) continue;
+      const info = celdaInfo(m, est, fila, col, f);
+      const seg = (info.segments || []).find(
+        (s) => s.bloque && s.bloque.reservaId === reservaHover,
+      );
+      if (!seg) {
+        if (actual) {
+          tramos.push(actual);
+          actual = null;
+        }
+        continue;
+      }
+      const caja = cajaBarra(seg, anchoCol(col));
+      const izq = izquierdaDeCol[col] + caja.left;
+      const der = izq + caja.width;
+      if (actual && caja.unidaIzq) {
+        actual.fin = der;
+      } else {
+        if (actual) tramos.push(actual);
+        actual = { inicio: izq, fin: der };
+      }
+      if (!caja.unidaDer) {
+        tramos.push(actual);
+        actual = null;
+      }
+    }
+    if (actual) tramos.push(actual);
+
+    const base = izquierdaDeCol[1];
+    return tramos.map((t, i) => (
+      <span
+        key={`halo${i}`}
+        className="barra-halo"
+        style={{ left: t.inicio - base, width: Math.max(0, t.fin - t.inicio) }}
+      />
+    ));
+  }
+
   function renderCelda(fila, col, fecha) {
     const info = celdaInfo(m, est, fila, col, fecha);
     const ancho = anchoCol(col);
@@ -1600,10 +1653,9 @@ export default function Calendario({
           );
         }
       }
-      // Glow blanco: se resaltan de una todos los bloques visibles de la
-      // reserva bajo el cursor, no solo el que tiene el puntero encima.
-      const resaltada = reservaHover != null && s.bloque && s.bloque.reservaId === reservaHover;
-      const clase = `${s.clase}${clasesUnidas(caja)}${resaltada ? ' barra-resaltada' : ''}`;
+      // El glow ya no se pinta por trozo (se duplicaba en cada costura): ahora
+      // lo dibuja un unico halo por tramo, ver halosDeFila().
+      const clase = `${s.clase}${clasesUnidas(caja)}`;
       return <span key={i} className={clase} style={{ left: caja.left, width: caja.width }} />;
     });
 
@@ -1618,6 +1670,7 @@ export default function Calendario({
         {previews}
         {celdas}
         {etiquetas}
+        {col === 1 && halosDeFila(fila)}
       </td>
     );
   }
