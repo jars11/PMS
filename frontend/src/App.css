@@ -423,6 +423,19 @@ label {
   z-index: 3;
 }
 
+/* Trozo de barra que continua en la celda vecina (no es un extremo del rango):
+   se le quita el redondeo del lado compartido para que las noches se vean como
+   UN bloque continuo. Los extremos (check-in / check-out) conservan el radio. */
+.barra-unida-izq {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.barra-unida-der {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .barra-gris {
   background: #9aa0a6;
 }
