@@ -69,6 +69,10 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   const [errorOrden, setErrorOrden] = useState('');
   const [reordenando, setReordenando] = useState(false);
 
+  // Firma del orden actual, para distinguir un cambio de orden real de un
+  // simple cambio de preview.
+  const firmaRef = useRef('');
+
   // Nodos de cada fila (id → <li>).
   const filasRef = useRef(new Map());
   // Posición base (layout, sin transform) de cada fila: id → offsetTop.
@@ -147,12 +151,16 @@ export default function Habitaciones({ habitaciones, onCambio }) {
     for (const [id, el] of filas) tops.set(id, el.offsetTop);
     topsBaseRef.current = tops;
 
+    const ids = ordenLocal ?? habitaciones.map((h) => h.id);
+    const firma = ids.join(',');
+    const cambioElOrden = firma !== firmaRef.current;
+    firmaRef.current = firma;
+
     const destinoPorId = new Map();
     if (arrastrando != null && sobre != null) {
       // Se derivan los ids acá (y no del array `ordenadas`) porque ese array es
       // nuevo en cada render: usarlo como dependencia volvía a correr la
       // animación en cada render y la cortaba a mitad de camino.
-      const ids = ordenLocal ?? habitaciones.map((h) => h.id);
       const objetivo = mover(ids, arrastrando, sobre);
       if (objetivo) {
         for (const id of ids) {
@@ -163,11 +171,28 @@ export default function Habitaciones({ habitaciones, onCambio }) {
       }
     }
 
-    // Filas que dejan de desplazarse vuelven a su lugar (también animado).
-    for (const id of desplazadasRef.current) {
-      if (destinoPorId.has(id)) continue;
-      const el = filas.get(id);
-      if (el) el.style.transform = '';
+    // Filas que dejan de estar desplazadas.
+    const sueltan = [...desplazadasRef.current].filter((id) => !destinoPorId.has(id));
+    if (sueltan.length > 0) {
+      // Al soltar, el orden del DOM ya cambió: la fila está en su lugar final y
+      // su transform era relativo a la posición VIEJA. Si se limpia con
+      // transición, el navegador interpola el transform y la fila se desliza
+      // 42px de más (eso era el "se mueven las demás" al soltar). Limpiarlo sin
+      // transición la deja instantáneamente donde el preview ya la mostraba.
+      for (const id of sueltan) {
+        const el = filas.get(id);
+        if (!el) continue;
+        if (cambioElOrden) el.style.transition = 'none';
+        el.style.transform = '';
+      }
+      if (cambioElOrden) {
+        // Consolida el salto antes de devolver la transición.
+        for (const [, el] of filas) void el.offsetHeight;
+        for (const id of sueltan) {
+          const el = filas.get(id);
+          if (el) el.style.transition = '';
+        }
+      }
     }
     for (const [id, delta] of destinoPorId) {
       const el = filas.get(id);
