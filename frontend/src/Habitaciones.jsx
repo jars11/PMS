@@ -300,6 +300,24 @@ export default function Habitaciones({ habitaciones, onCambio }) {
                 // Firefox no inicia el arrastre sin datos en el dataTransfer.
                 e.dataTransfer.setData('text/plain', String(h.id));
                 e.dataTransfer.effectAllowed = 'move';
+
+                // Imagen de arrastre propia: la fila se ve OPACA y con el
+                // reborde celeste mientras sigue al cursor. Sin esto el navegador
+                // usa una copia de la fila tal cual (y, junto con el hueco que
+                // deja en la lista, se veía doble).
+                const fila = e.currentTarget;
+                const caja = fila.getBoundingClientRect();
+                const clon = fila.cloneNode(true);
+                clon.classList.add('habitacion-ghost');
+                clon.style.width = `${caja.width}px`;
+                document.body.appendChild(clon);
+                e.dataTransfer.setDragImage(
+                  clon,
+                  Math.max(0, Math.min(caja.width, e.clientX - caja.left)),
+                  Math.max(0, Math.min(caja.height, e.clientY - caja.top)),
+                );
+                // El navegador ya tomó la imagen en este tick.
+                setTimeout(() => clon.remove(), 0);
               }}
             >
               <span className="habitacion-grip" aria-hidden="true">

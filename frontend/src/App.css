@@ -984,16 +984,35 @@ label.check input {
   will-change: transform;
 }
 
+/* Fila que se está arrastrando: queda como un HUECO vacío en la lista. El
+   contenido se oculta (visibility, no display, para no perder la altura) y la
+   fila se marca con el reborde celeste. La habitación en sí solo se ve en el
+   cursor, por la imagen de arrastre nativa. */
 .habitacion-fila.arrastrando {
   position: relative;
   z-index: 2;
-  opacity: 0.45;
+  background: transparent;
+  border: 1px dashed var(--acento);
+  box-shadow: none;
 }
 
-/* Marca la fila donde va a caer la arrastrada. */
-.habitacion-fila.sobre {
-  border-color: var(--acento);
-  box-shadow: inset 0 2px 0 var(--acento);
+.habitacion-fila.arrastrando > * {
+  visibility: hidden;
+}
+
+/* Ninguna otra fila lleva reborde celeste: el resalte es exclusivo de la
+   habitación que se está moviendo. */
+
+/* Clon que el navegador usa como imagen de arrastre: opaco como el resto y con
+   el reborde celeste que identifica la habitación seleccionada. */
+.habitacion-ghost {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  opacity: 1;
+  background: var(--panel-2);
+  border: 2px solid var(--acento);
+  pointer-events: none;
 }
 
 /* Filas que se corren un escalón para dejar ver el hueco del destino. */
