@@ -423,6 +423,19 @@ label {
   z-index: 3;
 }
 
+/* Trozo de barra que continua en la celda vecina (no es un extremo del rango):
+   se le quita el redondeo del lado compartido para que las noches se vean como
+   UN bloque continuo. Los extremos (check-in / check-out) conservan el radio. */
+.barra-unida-izq {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.barra-unida-der {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .barra-gris {
   background: #9aa0a6;
 }
@@ -444,10 +457,17 @@ label {
   opacity: 0.6;
 }
 
-/* Reserva bajo el cursor: glow blanco en TODOS sus bloques visibles, para
-   reconocer de un vistazo una reserva que ocupa varios bloques. */
-.barra-resaltada {
-  box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.9);
+/* Reserva bajo el cursor: UN solo halo por tramo contiguo del rango (no uno por
+   celda). La sombra se dibuja alrededor del tramo completo, asi el glow recorre
+   el rango entero sin franjas mas blancas en las costuras entre celdas. */
+.barra-halo {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 3px;
+  box-shadow: 0 0 7px 2px rgba(255, 255, 255, 0.95);
+  pointer-events: none;
+  z-index: 4;
 }
 
 /* Etiqueta "Titular — 2👤 + 👶" pintada sobre la barra (igual que Swing). */
@@ -922,10 +942,13 @@ label.check input {
   font-size: 1rem;
 }
 
-.habitaciones-ayuda {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--texto-tenue);
+/* Cabecera de la lista: título a la izquierda y estado de guardado como texto
+   simple a la derecha (no un cartel aparte que parezca un error de la GUI). */
+.habitaciones-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .habitaciones-lista-wrap,
@@ -964,17 +987,25 @@ label.check input {
   will-change: transform;
 }
 
+/* Fila que se está arrastrando: queda como un HUECO vacío en la lista. El
+   contenido se oculta (visibility, no display, para no perder la altura) y la
+   fila se marca con el reborde celeste. La habitación en sí solo se ve en el
+   cursor, por la imagen de arrastre nativa. */
 .habitacion-fila.arrastrando {
   position: relative;
   z-index: 2;
-  opacity: 0.45;
+  background: transparent;
+  border: 1px dashed var(--acento);
+  box-shadow: none;
 }
 
-/* Marca la fila donde va a caer la arrastrada. */
-.habitacion-fila.sobre {
-  border-color: var(--acento);
-  box-shadow: inset 0 2px 0 var(--acento);
+.habitacion-fila.arrastrando > * {
+  visibility: hidden;
 }
+
+/* Ninguna otra fila lleva reborde celeste: el resalte es exclusivo de la
+   habitación que se está moviendo. */
+
 
 /* Filas que se corren un escalón para dejar ver el hueco del destino. */
 .habitacion-fila.desplazada {
@@ -1000,6 +1031,33 @@ label.check input {
   color: var(--texto-tenue);
   font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
+}
+
+/* Rótulos que enmarcan la lista: arriba la más prioritaria, abajo la menos.
+   Reemplazan a la numeración de cada fila. */
+.habitaciones-prioridad-tope {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-tenue);
+}
+
+/* El rótulo de abajo va también a la izquierda, alineado con el de arriba. */
+.habitaciones-prioridad-tope--fin {
+  align-self: flex-start;
+}
+
+/* El botón nativo del selector de fecha (el icono del calendario) viene negro
+   sobre fondo oscuro y no se ve: se invierte para que quede blanco. */
+input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+input[type='date']:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
 }
 
 .habitacion-numero {

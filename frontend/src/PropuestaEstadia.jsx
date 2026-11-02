@@ -43,7 +43,6 @@ function bloqueNuevo(inicio) {
     camasMatrimoniales: 0,
     camasIndividuales: 0,
     bebes: 0,
-    cunas: 0,
     atributos: [],
   };
 }
@@ -65,8 +64,7 @@ function validarBloques(bloques) {
     if (
       bloque.camasMatrimoniales < 0 ||
       bloque.camasIndividuales < 0 ||
-      bloque.bebes < 0 ||
-      bloque.cunas < 0
+      bloque.bebes < 0
     ) {
       throw new Error('Las cantidades no pueden ser negativas.');
     }
@@ -74,14 +72,17 @@ function validarBloques(bloques) {
 }
 
 function aSolicitud(bloque) {
+  const bebes = Number(bloque.bebes) || 0;
   return {
     fechaInicio: bloque.fechaInicio,
     fechaFin: bloque.fechaFin,
     atributos: [...bloque.atributos],
     camasMatrimoniales: Number(bloque.camasMatrimoniales) || 0,
     camasIndividuales: Number(bloque.camasIndividuales) || 0,
-    bebes: Number(bloque.bebes) || 0,
-    cunas: Number(bloque.cunas) || 0,
+    bebes,
+    // Las cunas ya no se eligen: se piden tantas como bebés y el backend las
+    // recorta contra las cunas reales de la habitación.
+    cunas: bebes,
   };
 }
 
@@ -364,16 +365,6 @@ export default function PropuestaEstadia({ onPrevisualizar, onCreada, onCerrar }
                 max={MAX_CANTIDAD}
                 value={bloque.bebes}
                 onChange={(e) => cambiarBloque(i, 'bebes', e.target.value)}
-              />
-            </label>
-            <label>
-              Cunas
-              <input
-                type="number"
-                min="0"
-                max={MAX_CANTIDAD}
-                value={bloque.cunas}
-                onChange={(e) => cambiarBloque(i, 'cunas', e.target.value)}
               />
             </label>
             <fieldset className="propuesta-atributos">

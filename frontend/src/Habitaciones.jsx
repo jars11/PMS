@@ -69,10 +69,17 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   const [errorOrden, setErrorOrden] = useState('');
   const [reordenando, setReordenando] = useState(false);
 
-  // Nodos de cada fila (id → <li>) para medir y animar el reordenamiento.
+  // Firma del orden actual, para distinguir un cambio de orden real de un
+  // simple cambio de preview.
+  const firmaRef = useRef('');
+
+  // Nodos de cada fila (id → <li>).
   const filasRef = useRef(new Map());
-  // Posición visual de cada fila justo antes de aplicar un orden nuevo (FLIP).
-  const antesRef = useRef(null);
+  // Posición base (layout, sin transform) de cada fila: id → offsetTop.
+  const topsBaseRef = useRef(new Map());
+  // Posición base en coordenadas de viewport, capturada al iniciar el arrastre:
+  // en ese momento no hay transforms y las filas no se reordenan hasta soltar.
+  const topsCursorRef = useRef(new Map());
   // Filas con un desplazamiento de preview aplicado, para poder limpiarlo.
   const desplazadasRef = useRef(new Set());
 
@@ -88,73 +95,111 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   const indiceArrastrado = indiceDe(arrastrando);
   const indiceSobre = indiceDe(sobre);
 
-  /** Guarda la posición visual actual de cada fila para animar el próximo orden. */
-  function capturarPosiciones() {
-    const posiciones = new Map();
-    filasRef.current.forEach((el, id) => posiciones.set(id, el.getBoundingClientRect().top));
-    antesRef.current = posiciones;
+  /**
+   * Fila objetivo según la POSICIÓN del cursor, no según el elemento que recibe
+   * el dragover.
+   *
+   * El preview mueve las filas con transform, y el transform SÍ cambia el
+   * elemento que queda bajo el cursor. Si el destino se leyera del evento, cada
+   * movimiento de filas cambiaba el destino, que movía las filas otra vez... y
+   * la lista oscilaba sola aunque el mouse estuviera quieto.
+   *
+   * Se usa la geometría capturada al iniciar el arrastre (sin transforms y sin
+   * transiciones en curso): leer las filas ahora devolvería posiciones a medio
+   * animar y elegiría la fila vecina.
+   */
+  function filaBajoCursor(clientY) {
+    const ids = ordenLocal ?? habitaciones.map((h) => h.id);
+    const tops = topsCursorRef.current;
+    let mejor = null;
+    let mejorDist = Infinity;
+    for (const id of ids) {
+      const el = filasRef.current.get(id);
+      const top = tops.get(id);
+      if (!el || top == null) continue;
+      const dist = Math.abs(clientY - (top + el.offsetHeight / 2));
+      if (dist < mejorDist) {
+        mejorDist = dist;
+        mejor = id;
+      }
+    }
+    return mejor;
   }
 
-  useLayoutEffect(() => {
-    const filas = [...filasRef.current.entries()];
-    const antes = antesRef.current;
-    antesRef.current = null;
+  /** Captura la geometría de las filas tal como están ahora (sin transforms). */
+  function capturarGeometria() {
+    const tops = new Map();
+    for (const [id, el] of filasRef.current) tops.set(id, el.getBoundingClientRect().top);
+    topsCursorRef.current = tops;
+  }
 
-    if (antes) {
-      // FLIP: el orden ya cambió. Soltamos los transforms del preview, medimos
-      // el layout final y arrancamos desde la posición visual previa para
-      // animar hasta 0 (el estado y la persistencia no se tocan).
-      for (const [, el] of filas) {
-        el.style.transition = 'none';
-        el.style.transform = '';
-      }
-      const animadas = [];
-      for (const [id, el] of filas) {
-        const previa = antes.get(id);
-        if (previa == null) continue;
-        const delta = previa - el.getBoundingClientRect().top;
-        if (Math.abs(delta) < 0.5) continue;
-        el.style.transform = `translateY(${delta}px)`;
-        animadas.push(el);
-      }
-      if (animadas.length > 0) {
-        // Fuerza el reflow con el delta aplicado antes de habilitar la transición.
-        animadas[0].getBoundingClientRect();
-        for (const el of animadas) {
-          el.style.transition = '';
-          el.style.transform = '';
+  /**
+   * Preview del reordenamiento: cada fila se corre a la posición que va a ocupar
+   * si se suelta en la fila bajo el cursor, y la arrastrada sigue a ese destino.
+   *
+   * Claves para que no se trabe:
+   * - Las posiciones base se leen con `offsetTop`, que NO depende del transform
+   *   (leer `getBoundingClientRect()` sí lo incluiría y realimentaría el bucle).
+   * - Nunca se resetea el transform de todas las filas en cada evento: solo se
+   *   escribe el valor final, así el navegador interpola desde donde está.
+   * - El efecto depende de valores estables, no del array `ordenadas`, que es
+   *   nuevo en cada render y hacía correr la animación en cada tecla del form.
+   */
+  useLayoutEffect(() => {
+    const filas = filasRef.current;
+    const tops = new Map();
+    for (const [id, el] of filas) tops.set(id, el.offsetTop);
+    topsBaseRef.current = tops;
+
+    const ids = ordenLocal ?? habitaciones.map((h) => h.id);
+    const firma = ids.join(',');
+    const cambioElOrden = firma !== firmaRef.current;
+    firmaRef.current = firma;
+
+    const destinoPorId = new Map();
+    if (arrastrando != null && sobre != null) {
+      // Se derivan los ids acá (y no del array `ordenadas`) porque ese array es
+      // nuevo en cada render: usarlo como dependencia volvía a correr la
+      // animación en cada render y la cortaba a mitad de camino.
+      const objetivo = mover(ids, arrastrando, sobre);
+      if (objetivo) {
+        for (const id of ids) {
+          const slot = ids[objetivo.indexOf(id)];
+          const delta = (tops.get(slot) ?? 0) - (tops.get(id) ?? 0);
+          if (delta) destinoPorId.set(id, delta);
         }
       }
-      for (const [, el] of filas) el.style.transition = '';
-      desplazadasRef.current.clear();
-      return;
     }
 
-    // Preview durante el arrastre: cada fila se corre a su lugar definitivo y la
-    // arrastrada sigue al destino, así la lista se ve "hacer lugar" en vivo.
-    const ids = ordenadas.map((h) => h.id);
-    const origenIdx = arrastrando == null ? -1 : ids.indexOf(arrastrando);
-    const destinoIdx = sobre == null ? -1 : ids.indexOf(sobre);
-    const objetivo =
-      origenIdx >= 0 && destinoIdx >= 0 ? mover(ids, arrastrando, sobre) : null;
-
-    for (const id of desplazadasRef.current) {
-      const el = filasRef.current.get(id);
-      if (el) el.style.transform = '';
+    // Filas que dejan de estar desplazadas.
+    const sueltan = [...desplazadasRef.current].filter((id) => !destinoPorId.has(id));
+    if (sueltan.length > 0) {
+      // Al soltar, el orden del DOM ya cambió: la fila está en su lugar final y
+      // su transform era relativo a la posición VIEJA. Si se limpia con
+      // transición, el navegador interpola el transform y la fila se desliza
+      // 42px de más (eso era el "se mueven las demás" al soltar). Limpiarlo sin
+      // transición la deja instantáneamente donde el preview ya la mostraba.
+      for (const id of sueltan) {
+        const el = filas.get(id);
+        if (!el) continue;
+        if (cambioElOrden) el.style.transition = 'none';
+        el.style.transform = '';
+      }
+      if (cambioElOrden) {
+        // Consolida el salto antes de devolver la transición.
+        for (const [, el] of filas) void el.offsetHeight;
+        for (const id of sueltan) {
+          const el = filas.get(id);
+          if (el) el.style.transition = '';
+        }
+      }
     }
-    desplazadasRef.current.clear();
-    if (!objetivo) return;
-
-    const tops = ids.map((id) => filasRef.current.get(id)?.offsetTop ?? 0);
-    ids.forEach((id, desde) => {
-      const hasta = objetivo.indexOf(id);
-      const delta = hasta === desde ? 0 : tops[hasta] - tops[desde];
-      const el = filasRef.current.get(id);
-      if (!el || !delta) return;
-      el.style.transform = `translateY(${delta}px)`;
-      desplazadasRef.current.add(id);
-    });
-  }, [arrastrando, sobre, ordenadas]);
+    for (const [id, delta] of destinoPorId) {
+      const el = filas.get(id);
+      if (el) el.style.transform = `translateY(${delta}px)`;
+    }
+    desplazadasRef.current = new Set(destinoPorId.keys());
+  }, [arrastrando, sobre, ordenLocal, habitaciones]);
 
   function campo(clave) {
     return (e) => setForm((f) => ({ ...f, [clave]: e.target.value }));
@@ -183,8 +228,10 @@ export default function Habitaciones({ habitaciones, onCambio }) {
     if (!ids) return;
 
     // Optimista: la fila se mueve ya y, si el backend rechaza, el orden vuelve
-    // al del padre (que sigue siendo el viejo) al limpiar ordenLocal.
-    capturarPosiciones();
+    // al del padre (que sigue siendo el viejo) al limpiar ordenLocal. El preview
+    // del arrastre ya dejó cada fila en su lugar final, así que el cambio de
+    // orden no necesita un FLIP extra: al limpiar los transforms las filas
+    // quedan exactamente donde se veían.
     setOrdenLocal(ids);
     setReordenando(true);
     setErrorOrden('');
@@ -194,8 +241,6 @@ export default function Habitaciones({ habitaciones, onCambio }) {
     } catch (err) {
       setErrorOrden(err.message);
     } finally {
-      // Si el orden vuelve atrás (error) el regreso también se anima.
-      capturarPosiciones();
       setOrdenLocal(null);
       setReordenando(false);
     }
@@ -227,15 +272,37 @@ export default function Habitaciones({ habitaciones, onCambio }) {
   return (
     <div className="habitaciones">
       <section className="habitaciones-lista-wrap">
-        <h2>Habitaciones</h2>
-        <p className="habitaciones-ayuda">
-          Arrastrá las filas para cambiar el orden. El orden ascendente es la prioridad: la primera
-          fila tiene prioridad sobre las de abajo cuando varias pueden entrar en la misma propuesta.
-        </p>
+        <div className="habitaciones-cabecera">
+          <h2>Habitaciones</h2>
+          {reordenando && <span className="habitaciones-estado">Guardando orden…</span>}
+        </div>
+        <span className="habitaciones-prioridad-tope">Más prioritaria</span>
 
         {errorOrden && <div className="error habitaciones-error">{errorOrden}</div>}
 
-        <ul className="habitaciones-lista">
+        <ul
+          className="habitaciones-lista"
+          // Los eventos de arrastre se manejan en el contenedor: así el destino
+          // depende solo de la posición del cursor y no de qué fila quedó
+          // debajo (ver filaBajoCursor).
+          onDragOver={(e) => {
+            if (arrastrando == null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const id = filaBajoCursor(e.clientY);
+            if (id != null && sobre !== id) setSobre(id);
+          }}
+          onDrop={(e) => {
+            if (arrastrando == null) return;
+            e.preventDefault();
+            const id = filaBajoCursor(e.clientY) ?? sobre ?? arrastrando;
+            soltar(id);
+          }}
+          onDragEnd={() => {
+            setArrastrando(null);
+            setSobre(null);
+          }}
+        >
           {ordenadas.map((h, i) => (
             <li
               key={h.id}
@@ -251,31 +318,27 @@ export default function Habitaciones({ habitaciones, onCambio }) {
               }
               draggable
               onDragStart={(e) => {
+                // Geometría previa al preview: con transforms aplicados las
+                // posiciones quedarían a medio animar.
+                capturarGeometria();
                 setArrastrando(h.id);
                 // Firefox no inicia el arrastre sin datos en el dataTransfer.
                 e.dataTransfer.setData('text/plain', String(h.id));
                 e.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragOver={(e) => {
-                if (arrastrando == null || arrastrando === h.id) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                if (sobre !== h.id) setSobre(h.id);
-              }}
-              onDragLeave={() => setSobre((previo) => (previo === h.id ? null : previo))}
-              onDrop={(e) => {
-                e.preventDefault();
-                soltar(h.id);
-              }}
-              onDragEnd={() => {
-                setArrastrando(null);
-                setSobre(null);
+
+                // Sin imagen de arrastre: el navegador no dibuja nada siguiendo
+                // al cursor, así la habitación se ve SOLO como el hueco celeste
+                // de la lista. Se usa un canvas transparente de 1x1 px porque
+                // setDragImage exige un elemento.
+                const vacio = document.createElement('canvas');
+                vacio.width = 1;
+                vacio.height = 1;
+                e.dataTransfer.setDragImage(vacio, 0, 0);
               }}
             >
               <span className="habitacion-grip" aria-hidden="true">
                 ⠿
               </span>
-              <span className="habitacion-prioridad">{i + 1}</span>
               <span className="habitacion-numero">Hab. {h.numero}</span>
               <span className="habitacion-camas">{distribucionCamas(h)}</span>
               <span className="habitacion-atributos">
@@ -287,7 +350,9 @@ export default function Habitaciones({ habitaciones, onCambio }) {
             <li className="habitacion-vacio">No hay habitaciones.</li>
           )}
         </ul>
-        {reordenando && <div className="habitaciones-estado">Guardando orden…</div>}
+        <span className="habitaciones-prioridad-tope habitaciones-prioridad-tope--fin">
+          Menos prioritaria
+        </span>
       </section>
 
       <form className="habitaciones-form" onSubmit={agregar}>

@@ -170,6 +170,30 @@ function pixeles(seg, ancho) {
   return [x0, x1];
 }
 
+// Solape de 1 px hacia la celda siguiente: cierra la costura que dejan el borde
+// de la celda y el redondeo, para que las noches de un rango se lean como UN
+// bloque. Solo se aplica donde el rango continua (nunca en check-in/check-out).
+const SOLAPE_PX = 1;
+
+/**
+ * Caja (left/width en px, dentro de la celda) de un trozo de barra, mas los
+ * lados donde el trozo continua en la celda vecina. Un lado es continuo cuando
+ * el borde del trozo coincide con el borde de la celda: ahi no hay extremo de
+ * la reserva, asi que la barra se pinta 1 px de mas y sin esquina redondeada.
+ */
+function cajaBarra(seg, ancho) {
+  const [x0, x1] = pixeles(seg, ancho);
+  const unidaIzq = seg.x0 <= 0;
+  const unidaDer = seg.x1 >= 1;
+  const derecha = Math.max(x0, x1) + (unidaDer ? SOLAPE_PX : 0);
+  return { left: x0, width: Math.max(0, derecha - x0), unidaIzq, unidaDer };
+}
+
+/** Clases CSS que quitan el redondeo en los lados continuos del trozo. */
+function clasesUnidas(caja) {
+  return `${caja.unidaIzq ? ' barra-unida-izq' : ''}${caja.unidaDer ? ' barra-unida-der' : ''}`;
+}
+
 function nochesVisibles(ancho) {
   if (ancho <= ANCHO_HABITACION || ancho <= 0) return NOCHES_POR_DEFECTO;
   return Math.max(1, Math.floor((ancho - ANCHO_HABITACION) / ANCHO_NOCHE_MIN));
@@ -1540,6 +1564,59 @@ export default function Calendario({
     return cacheEtiquetas.get(clave);
   }
 
+  /**
+   * Halos (glow) de la reserva bajo el cursor: UN elemento por tramo contiguo de
+   * la fila, no uno por celda. Un halo por celda duplicaba la sombra en cada
+   * costura y dejaba una franja mas blanca que se veia como bloques separados;
+   * con un solo elemento por tramo el halo recorre el rango entero.
+   *
+   * Se pintan dentro de la primera celda de dias (que es position: relative) y
+   * se dejan desbordar hacia la derecha, porque no hay overflow: hidden.
+   */
+  function halosDeFila(fila) {
+    if (reservaHover == null || !m || !izquierdaDeCol[1]) return [];
+    const tramos = [];
+    let actual = null;
+    for (let col = 1; col <= m.noches; col++) {
+      const f = m.fechaDeColumna(col);
+      if (!f) continue;
+      const info = celdaInfo(m, est, fila, col, f);
+      const seg = (info.segments || []).find(
+        (s) => s.bloque && s.bloque.reservaId === reservaHover,
+      );
+      if (!seg) {
+        if (actual) {
+          tramos.push(actual);
+          actual = null;
+        }
+        continue;
+      }
+      const caja = cajaBarra(seg, anchoCol(col));
+      const izq = izquierdaDeCol[col] + caja.left;
+      const der = izq + caja.width;
+      if (actual && caja.unidaIzq) {
+        actual.fin = der;
+      } else {
+        if (actual) tramos.push(actual);
+        actual = { inicio: izq, fin: der };
+      }
+      if (!caja.unidaDer) {
+        tramos.push(actual);
+        actual = null;
+      }
+    }
+    if (actual) tramos.push(actual);
+
+    const base = izquierdaDeCol[1];
+    return tramos.map((t, i) => (
+      <span
+        key={`halo${i}`}
+        className="barra-halo"
+        style={{ left: t.inicio - base, width: Math.max(0, t.fin - t.inicio) }}
+      />
+    ));
+  }
+
   function renderCelda(fila, col, fecha) {
     const info = celdaInfo(m, est, fila, col, fecha);
     const ancho = anchoCol(col);
@@ -1548,17 +1625,17 @@ export default function Calendario({
     const previews = (previewPorFila.get(fila) || []).map((bloque, i) => {
       const seg = segmento(bloque, fecha);
       if (!seg) return null;
-      const [x0, x1] = pixeles(seg, ancho);
+      const caja = cajaBarra(seg, ancho);
       return (
         <span
           key={`p${i}`}
-          className="barra barra-propuesta"
-          style={{ left: x0, width: Math.max(0, x1 - x0) }}
+          className={`barra barra-propuesta${clasesUnidas(caja)}`}
+          style={{ left: caja.left, width: caja.width }}
         />
       );
     });
     const celdas = info.segments.map((s, i) => {
-      const [x0, x1] = pixeles(s, ancho);
+      const caja = cajaBarra(s, ancho);
       const disp = etiquetaDeSegmento(s);
       if (disp) {
         // Cada celda pinta su trozo de etiqueta: el texto se corre hacia la
@@ -1576,16 +1653,10 @@ export default function Calendario({
           );
         }
       }
-      // Glow blanco: se resaltan de una todos los bloques visibles de la
-      // reserva bajo el cursor, no solo el que tiene el puntero encima.
-      const resaltada = reservaHover != null && s.bloque && s.bloque.reservaId === reservaHover;
-      return (
-        <span
-          key={i}
-          className={resaltada ? `${s.clase} barra-resaltada` : s.clase}
-          style={{ left: x0, width: Math.max(0, x1 - x0) }}
-        />
-      );
+      // El glow ya no se pinta por trozo (se duplicaba en cada costura): ahora
+      // lo dibuja un unico halo por tramo, ver halosDeFila().
+      const clase = `${s.clase}${clasesUnidas(caja)}`;
+      return <span key={i} className={clase} style={{ left: caja.left, width: caja.width }} />;
     });
 
     return (
@@ -1599,6 +1670,7 @@ export default function Calendario({
         {previews}
         {celdas}
         {etiquetas}
+        {col === 1 && halosDeFila(fila)}
       </td>
     );
   }
